@@ -126,6 +126,21 @@ Rasterzeile Höhe, die das Runden erzeugt) fallen weg.
 Länderpolygonen nicht aus. Der Bosporus ist dort massives Land, egal welche
 Auflösung — deshalb die `kanal`-Kennzeichnung statt feinerer Daten.
 
+## Bedienung
+
+- **Ziehen** verschiebt die Karte, **Mausrad** zoomt auf den Mauszeiger,
+  **Doppelklick** zoomt hinein (mit Shift heraus).
+- **Tasten:** `+` / `−` zoomen, `0` zurück zur Übersicht, `Esc` leert die
+  Auswahl oder verlässt die Detailansicht.
+- Fährt man über ein Land, wird es umrandet und benannt — sonst wäre nicht
+  erkennbar, dass Länder überhaupt anklickbar sind.
+- Ein Klick ins Meer wählt **nichts** ab. Die Auswahl versehentlich zu
+  verlieren war der ärgerlichste Fehlgriff; Leeren geht über den Chip oder
+  `Esc`.
+- Ein Ziehen, das auf einem Land endet, wählt nichts aus.
+- Der Knopf **⟲ ÜBERSICHT** erscheint erst, wenn der Ausschnitt von Hand
+  verstellt wurde.
+
 ## Länder anklicken
 
 Auf der Lagekarte lässt sich jedes Land anklicken — mehrere gleichzeitig. Für

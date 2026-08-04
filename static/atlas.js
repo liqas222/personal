@@ -90,10 +90,31 @@ function init() {
   addEventListener("resize", resize);
   cv.addEventListener("mousemove", onMove);
   cv.addEventListener("click", onClick);
+  cv.addEventListener("wheel", onWheel, { passive: false });
+  cv.addEventListener("mousedown", onDown);
+  addEventListener("mouseup", onUp);
+  cv.addEventListener("dblclick", (ev) => {
+    const [x, y] = mausPos(ev);
+    zoome(ev.shiftKey ? 0.5 : 2, x, y);
+  });
   cv.addEventListener("mouseleave", () => {
     hover = null;
+    hoverLand = null;
     cv.style.cursor = "default";
   });
+  cv.style.cursor = "grab";
+  // Tastatur: Zoomen, zurück zur Übersicht, Auswahl leeren.
+  addEventListener("keydown", (ev) => {
+    if (/^(INPUT|TEXTAREA)$/.test((ev.target || {}).tagName || "")) return;
+    if (ev.key === "+" || ev.key === "=") zoome(1.5, W / 2, H / 2);
+    else if (ev.key === "-") zoome(1 / 1.5, W / 2, H / 2);
+    else if (ev.key === "0") zurueckZurUebersicht();
+    else if (ev.key === "Escape") {
+      if (AUSWAHL.size) { AUSWAHL.clear(); malAuswahl(); }
+      else if (modus === "detail") setModus("welt");
+    }
+  });
+  document.getElementById("zuruecksetzen").onclick = zurueckZurUebersicht;
 
   bauListe();
   bauEbenen();
@@ -110,6 +131,7 @@ function init() {
   document.getElementById("stand").textContent = STAND;
 
   holeLive();
+  document.body.dataset.frei = "nein";
   view = makeView(WELT_BBOX, W, H);
   setModus("welt");
   requestAnimationFrame(tick);
@@ -273,6 +295,8 @@ function setAnsicht(a) {
    billiger, aber genau die Bewegung ist es, die haengen bleibt: man sieht,
    WO die Enge liegt, nicht nur wie sie aussieht. */
 function fliegeZu(bbox) {
+  frei = false;
+  document.body.dataset.frei = "nein";
   const von = view ? view.bbox.slice() : bbox.slice();
   ziel = { bbox: bbox.slice() };
   anim = { von: von, nach: bbox.slice(), start: performance.now(), dauer: 900 };
@@ -342,7 +366,9 @@ function zeichne(now) {
       if (AN.ziele) zeichneZiele(now);
       if (AN.callouts) zeichneCallouts();
     }
+    zeichneHover();
   } else {
+    zeichneHover();
     zeichneMeere(markenKaesten());
     if (AN.konflikte) zeichneKonflikte(now);
     if (AN.kontrolle) zeichneKontrollzonen();
@@ -519,9 +545,15 @@ function landMitte(name) {
   for (const p of l.polys) {
     const [w, s, e, n] = p.bbox;
     const f = (e - w) * (n - s);
-    if (!best || f > best.f) best = { f: f, p: [(w + e) / 2, (s + n) / 2] };
+    if (!best || f > best.f) best = { f: f, ring: p, bbox: [w, s, e, n] };
   }
-  MITTEN[name] = best ? best.p : null;
+  if (!best) return (MITTEN[name] = null);
+  // Mittelpunkt der Bounding-Box liegt bei gebogenen Ländern im Meer — bei
+  // Japan mitten in der See. Der Durchschnitt der Eckpunkte trifft die
+  // Landmasse deutlich zuverlässiger.
+  let sx = 0, sy = 0;
+  for (const [x, y] of best.ring.pts) { sx += x; sy += y; }
+  MITTEN[name] = [sx / best.ring.pts.length, sy / best.ring.pts.length];
   return MITTEN[name];
 }
 
@@ -1168,15 +1200,160 @@ function trefferMarke(mx, my) {
   return null;
 }
 
+/* ---------- Freies Navigieren ----------
+
+   Bisher konnte man nur zu festen Ausschnitten springen. Jetzt ist die Karte
+   frei beweglich: ziehen zum Verschieben, Mausrad zum Zoomen.
+
+   Der Ausschnitt bleibt dabei die einzige Wahrheit. Statt an den Grenzen zu
+   rechnen, wird der neue Ausschnitt aus dem Bildschirmrechteck zurückgerechnet
+   — das ist exakt und macht auch beim Zoomen auf den Mauszeiger keine Mühe.
+   Nebeneffekt: das Ergebnis hat immer das Seitenverhältnis der Leinwand, also
+   entstehen keine Ränder und nichts driftet. */
+
+let zieht = null;         // {x, y, bewegt} während des Ziehens
+let frei = false;         // hat der Nutzer den Ausschnitt selbst verstellt?
+
+function bboxAusRechteck(x0, y0, x1, y1) {
+  const a = view.invert(x0, y0);   // oben links
+  const b = view.invert(x1, y1);   // unten rechts
+  return [a[0], b[1], b[0], a[1]];
+}
+
+function setzeAusschnitt(bbox, vonHand) {
+  const spanne = bbox[2] - bbox[0];
+  // Grenzen: nicht weiter als die ganze Welt, nicht enger als ~5 km Breite.
+  if (spanne > 400 || spanne < 0.05) return;
+  if (bbox[3] > 88 || bbox[1] < -88) return;
+  anim = null;
+  ziel = null;
+  view = makeView(bbox, W, H);
+  basisSchluessel = "";
+  if (vonHand) {
+    frei = true;
+    document.body.dataset.frei = "ja";
+  }
+}
+
+function zoome(faktor, cx, cy) {
+  const f = Math.max(0.2, Math.min(5, faktor));
+  const x0 = cx - cx / f, y0 = cy - cy / f;
+  setzeAusschnitt(bboxAusRechteck(x0, y0, x0 + W / f, y0 + H / f), true);
+}
+
+function zurueckZurUebersicht() {
+  frei = false;
+  document.body.dataset.frei = "nein";
+  fliegeZu(modus === "detail" && aktiv
+    ? (ansicht === "betroffen" ? aktiv.betroffen.bbox : aktiv.zoom)
+    : WELT_BBOX);
+}
+
+function onWheel(ev) {
+  ev.preventDefault();
+  const [mx, my] = mausPos(ev);
+  // Trackpads liefern kleine Beträge, Mausräder grosse — beides auf einen
+  // gleichmässigen Faktor bringen.
+  const schritt = Math.max(-1, Math.min(1, -ev.deltaY / 100));
+  zoome(Math.exp(schritt * 0.42), mx, my);
+}
+
+function onDown(ev) {
+  if (ev.button !== 0) return;
+  const [x, y] = mausPos(ev);
+  zieht = { x: x, y: y, bewegt: 0 };
+  cv.style.cursor = "grabbing";
+}
+
+function onUp() {
+  zieht = null;
+  cv.style.cursor = hover || hoverLand ? "pointer" : "grab";
+}
+
+/* ---------- Zeigen und Anwählen ---------- */
+
+let hoverLand = null;
+let hoverPos = [0, 0];
+let letzterTest = 0;
+
 function onMove(ev) {
-  if (modus !== "welt") {
-    hover = null;
-    cv.style.cursor = modus === "quiz" && !quiz.antwort ? "crosshair" : "default";
+  const [mx, my] = mausPos(ev);
+  hoverPos = [mx, my];
+
+  if (zieht) {
+    const dx = mx - zieht.x, dy = my - zieht.y;
+    zieht.bewegt += Math.abs(dx) + Math.abs(dy);
+    setzeAusschnitt(bboxAusRechteck(-dx, -dy, W - dx, H - dy), true);
+    // Nach dem Verschieben zeigt derselbe Punkt auf neue Koordinaten.
+    zieht.x = mx;
+    zieht.y = my;
     return;
   }
-  const [mx, my] = mausPos(ev);
+
+  if (modus === "quiz") {
+    hover = null;
+    hoverLand = null;
+    cv.style.cursor = quiz.antwort ? "default" : "crosshair";
+    return;
+  }
+
   hover = trefferMarke(mx, my);
-  cv.style.cursor = hover ? "pointer" : "default";
+  // Landsuche ist teurer als der Markertest — nur anstossen, wenn sich die
+  // Maus spürbar bewegt hat.
+  if (!hover && performance.now() - letzterTest > 60) {
+    letzterTest = performance.now();
+    const [lon, lat] = view.invert(mx, my);
+    hoverLand = landBei(((lon + 180) % 360 + 360) % 360 - 180, lat);
+  } else if (hover) {
+    hoverLand = null;
+  }
+  cv.style.cursor = hover || hoverLand ? "pointer" : "grab";
+}
+
+/* Zeigt an, was unter dem Zeiger liegt — ohne das ist nicht erkennbar, dass
+   Länder überhaupt anklickbar sind. */
+function zeichneHover() {
+  if (!hoverLand || zieht || modus === "quiz") return;
+  const l = LAENDER.find((x) => x.n === hoverLand);
+  if (!l) return;
+  const [vw, vs, ve, vn] = view.bbox;
+  ctx.beginPath();
+  for (const p of l.polys) {
+    const [w, s, e, n] = p.bbox;
+    if (e < vw || w > ve || n < vs || s > vn) continue;
+    p.pts.forEach((pt, i) => {
+      const [x, y] = view.project(pt[0], pt[1]);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+  }
+  ctx.fillStyle = AUSWAHL.has(hoverLand)
+    ? "rgba(255,45,45,.12)" : "rgba(0,230,118,.13)";
+  ctx.fill("nonzero");
+  ctx.strokeStyle = AUSWAHL.has(hoverLand) ? "#ff6b6b" : "#00e676";
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  const name = (HANDEL[hoverLand] && HANDEL[hoverLand].t) || hoverLand;
+  const zusatz = AUSWAHL.has(hoverLand) ? "  ABWÄHLEN"
+    : HANDEL[hoverLand] ? "  ANWÄHLEN" : "  KEIN PROFIL";
+  ctx.font = '700 11px ui-monospace,Menlo,Consolas,monospace';
+  ctx.letterSpacing = "1.2px";
+  const t = name.toUpperCase() + zusatz;
+  const b = ctx.measureText(t).width;
+  let bx = hoverPos[0] + 14, by = hoverPos[1] + 14;
+  if (bx + b + 12 > W) bx = hoverPos[0] - b - 26;
+  if (by + 22 > H) by = hoverPos[1] - 30;
+  ctx.fillStyle = "rgba(4,10,8,.92)";
+  ctx.fillRect(bx, by, b + 12, 20);
+  ctx.strokeStyle = "#00e676";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, b + 12, 20);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#00e676";
+  ctx.fillText(t, bx + 6, by + 11);
+  ctx.letterSpacing = "0px";
 }
 
 function onClick(ev) {
@@ -1186,15 +1363,21 @@ function onClick(ev) {
     pruefeAntwort(view.invert(mx, my));
     return;
   }
-  if (modus !== "welt") return;
+  // Ein Klick, der eigentlich ein Ziehen war, darf nichts auswählen.
+  if (zieht && zieht.bewegt > 5) return;
   const e = trefferMarke(mx, my);
   if (e) { zeigeEnge(e); return; }
+  // In der Rollen-Ansicht bedeuten die Farben etwas anderes — dort keine
+  // Auswahl, sonst überall.
+  if (modus === "detail" && ansicht === "betroffen") return;
   // Kein Marker getroffen: dann das Land darunter aus- oder abwählen.
   // Mehrfachauswahl ist der Normalfall — genau der Vergleich zweier Länder
   // ist ja die interessante Frage.
   const [lon, lat] = view.invert(mx, my);
   const name = landBei(((lon + 180) % 360 + 360) % 360 - 180, lat);
-  if (!name) { AUSWAHL.clear(); malAuswahl(); return; }
+  // Klick ins Meer wählt nichts ab. Die Auswahl versehentlich zu verlieren
+  // war der ärgerlichste Fehlgriff — Leeren geht über den Knopf oder Esc.
+  if (!name) return;
   AUSWAHL.has(name) ? AUSWAHL.delete(name) : AUSWAHL.add(name);
   malAuswahl();
 }

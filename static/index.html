@@ -85,8 +85,18 @@ body:not([data-modus="detail"]) #ansichten{display:none}
 body:not([data-modus="detail"]) #legende{display:none}
 #legende .hw{margin-top:9px;padding-top:9px;border-top:1px solid var(--rand);
   color:var(--dim);line-height:1.45}
-#hinweis{position:absolute;bottom:14px;left:14px;color:var(--dim);font-size:11px;
-  background:#0b0f16aa;padding:5px 9px;border-radius:5px;pointer-events:none}
+#hinweis{position:absolute;bottom:14px;left:14px;color:var(--dim);font-size:10px;
+  background:#060a0edd;border:1px solid #16302a;padding:6px 10px;
+  letter-spacing:1px;pointer-events:none}
+#hinweis b{color:var(--phos);font-weight:700}
+/* Erscheint erst, wenn der Ausschnitt von Hand verstellt wurde — sonst wäre
+   es ein Knopf ohne Wirkung. */
+#zuruecksetzen{position:absolute;top:14px;left:14px;background:#0a1a12e8;
+  backdrop-filter:blur(6px);border:1px solid #1f5a3e;color:var(--phos);
+  padding:6px 12px;cursor:pointer;font:inherit;font-size:10px;letter-spacing:1.5px}
+#zuruecksetzen:hover{background:#13301f}
+body:not([data-frei="ja"]) #zuruecksetzen{display:none}
+body[data-modus="detail"][data-frei="ja"] #zuruecksetzen{left:auto;right:280px;top:14px}
 
 /* Ebenen-Schaltpult */
 #ebenen{position:absolute;top:14px;right:14px;width:250px;
@@ -270,7 +280,11 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
       <button data-ansicht="betroffen">Wer hängt daran</button>
     </div>
     <div id="legende" hidden></div>
-    <div id="hinweis">Marker anwählen für Detailaufklärung.</div>
+    <button id="zuruecksetzen" title="Taste 0">⟲ ÜBERSICHT</button>
+    <div id="hinweis">
+      <b>ZIEHEN</b> verschieben · <b>MAUSRAD</b> zoomen ·
+      <b>LAND</b> anklicken für Handelsprofil · <b>MARKER</b> für die Meerenge
+    </div>
     <div id="ebenen"></div>
     <div id="statuslegende"></div>
     <div id="auswahl"></div>
