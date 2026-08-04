@@ -23,6 +23,9 @@ let quiz = { frage: null, rest: [], antwort: null, punkte: 0, runden: 0 };
 const AN = {};
 for (const e of EBENEN) AN[e.id] = e.an;
 
+/* Mehrfachauswahl von Ländern. Ein Klick schaltet ein Land dazu oder weg. */
+const AUSWAHL = new Set();
+
 /* Rollen der betroffenen Länder. Die drei Farben sind gegen den dunklen
    Untergrund und gegen Farbfehlsichtigkeit geprüft; zusätzlich trägt jedes
    Land seinen Namen, Farbe allein muss also nie ausreichen. */
@@ -30,6 +33,7 @@ const ROLLEN = {
   kontrolle: { c: "#199e70", fill: "#1b6b52", t: "Kontrolliert die Enge" },
   ausfuhr: { c: "#d95926", fill: "#8a3c1e", t: "Verschifft hier hinaus" },
   einfuhr: { c: "#3987e5", fill: "#2a5a94", t: "Empfängt über diese Route" },
+  folge: { c: "#9085e9", fill: "#403a72", t: "Zweite Reihe — hängt an einem Betroffenen" },
 };
 
 const F = {
@@ -94,6 +98,7 @@ function init() {
   bauListe();
   bauEbenen();
   bauStatuslegende();
+  malAuswahl();
   document.querySelectorAll("nav button[data-modus]").forEach((b) => {
     b.onclick = () => setModus(b.dataset.modus);
   });
@@ -104,6 +109,7 @@ function init() {
   document.getElementById("weiter").onclick = naechsteFrage;
   document.getElementById("stand").textContent = STAND;
 
+  holeLive();
   view = makeView(WELT_BBOX, W, H);
   setModus("welt");
   requestAnimationFrame(tick);
@@ -130,9 +136,20 @@ function rollenKarte() {
   if (modus !== "detail" || ansicht !== "betroffen" || !aktiv) return {};
   const b = aktiv.betroffen;
   const m = {};
+  // Erste Reihe: unmittelbar an der Enge.
   for (const l of b.einfuhr) m[l.ne] = "einfuhr";
   for (const l of b.ausfuhr) m[l.ne] = "ausfuhr";
   for (const l of b.kontrolle) m[l.ne] = "kontrolle";
+  // Zweite Reihe: wer mit einem Betroffenen Handel treibt, ist mitbetroffen —
+  // eine gesperrte Enge trifft nicht nur den Anrainer, sondern dessen
+  // Lieferanten und Abnehmer gleich mit. Wird aus den Handelspartnern der
+  // ersten Reihe abgeleitet, nicht von Hand gepflegt.
+  const erste = Object.keys(m);
+  for (const name of erste) {
+    const h = HANDEL[name];
+    if (!h) continue;
+    for (const p of h.pAus.concat(h.pEin)) if (!m[p]) m[p] = "folge";
+  }
   return m;
 }
 
@@ -143,6 +160,10 @@ function zeichneRollenNamen(e) {
   const namen = {};
   for (const gruppe of ["kontrolle", "ausfuhr", "einfuhr"]) {
     for (const l of e.betroffen[gruppe]) if (rollen[l.ne] === gruppe) namen[l.ne] = l.t;
+  }
+  // Die zweite Reihe bekommt ihren deutschen Namen aus den Handelsprofilen.
+  for (const n of Object.keys(rollen)) {
+    if (!namen[n]) namen[n] = (HANDEL[n] && HANDEL[n].t) || n;
   }
   const gesetzt = [];
   ctx.textAlign = "center";
@@ -168,6 +189,15 @@ function zeichneRollenNamen(e) {
     gesetzt.push(kasten);
     ctx.fillStyle = "#f2f4f7";
     halo(namen[l.n], x, y);
+    // Wie stark hängt dieses Land an genau dieser Enge? Das ist die
+    // eigentliche Aussage — ohne sie sieht Japan aus wie Indien.
+    const a = (ABHAENGIGKEIT[e.id] || {})[l.n];
+    if (a) {
+      ctx.font = '700 11px ui-monospace,Menlo,Consolas,monospace';
+      ctx.fillStyle = a.wert >= 80 ? "#ff6b6b" : a.wert >= 50 ? "#ffb000" : "#8fd6b4";
+      halo(a.wert + " %", x, y + 13);
+      ctx.font = "600 11px ui-sans-serif,system-ui,sans-serif";
+    }
   }
   // Die Enge selbst bleibt der Bezugspunkt.
   const [mx, my] = view.project(e.pos[0], e.pos[1]);
@@ -298,6 +328,7 @@ function zeichne(now) {
 
   if (modus === "detail" && aktiv) {
     if (ansicht === "betroffen") {
+      zeichneBetroffenBoegen(aktiv, now);
       zeichneRollenNamen(aktiv);
     } else {
       // Die Lagebild-Ebenen gelten auch im Zoom — dort sind sie sogar
@@ -316,11 +347,243 @@ function zeichne(now) {
     if (AN.konflikte) zeichneKonflikte(now);
     if (AN.kontrolle) zeichneKontrollzonen();
     if (AN.vektoren) zeichneVektoren(now);
+    if (AUSWAHL.size) zeichneAuswahlBoegen(now);
     zeichneMarken(now);
     if (AN.ziele) zeichneZiele(now);
     if (AN.callouts) zeichneCallouts();
   }
   zeichneFadenkreuz();
+}
+
+/* ---------- Live-Daten ---------- */
+
+/* Tägliche Durchfahrten je Enge, vom eigenen Server geholt (der wiederum
+   IMF PortWatch abfragt). Beim Öffnen per Doppelklick vom Dateisystem gibt es
+   keinen Server — dann bleibt es schlicht aus, statt Fehler zu werfen. */
+let LIVE = null;
+
+async function holeLive() {
+  const feld = document.getElementById("lgLive");
+  try {
+    const r = await fetch("api/live", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    if (d.fehler || !d.stand) throw new Error(d.fehler || "keine Daten");
+    LIVE = d;
+    feld.innerHTML = '<b style="color:var(--phos)">' + d.stand + "</b>";
+    feld.title = d.quelle;
+    basisSchluessel = "";
+  } catch (e) {
+    LIVE = null;
+    // Sichtbar aus, nicht heimlich aus.
+    feld.innerHTML = '<b style="color:var(--dim)">AUS</b>';
+    feld.title = "Kein Live-Abruf: " + e.message;
+  }
+}
+
+/* ---------- Auswahl von Ländern und Handelsbögen ---------- */
+
+/* Welches Land liegt an diesem Punkt? Ungerade Zahl von Ringkreuzungen
+   heisst drin — Löcher (Enklaven, Seen) kippen die Parität und fallen damit
+   automatisch heraus. */
+function landBei(lon, lat) {
+  for (const l of LAENDER) {
+    let drin = false;
+    for (const p of l.polys) {
+      const [w, s, e, n] = p.bbox;
+      if (lon < w || lon > e || lat < s || lat > n) continue;
+      const pts = p.pts;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const [xi, yi] = pts[i], [xj, yj] = pts[j];
+        if (yi > lat !== yj > lat &&
+            lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) drin = !drin;
+      }
+    }
+    if (drin) return l.n;
+  }
+  return null;
+}
+
+/* Grosskreis zwischen zwei Punkten. Eine gerade Linie auf der Mercatorkarte
+   wäre der falsche Weg — Flug- und Seewege folgen dem Grosskreis, und bei
+   Verbindungen über den halben Globus sieht man den Unterschied sofort. */
+function grosskreis(a, b, n) {
+  const rad = Math.PI / 180;
+  const v = (p) => [Math.cos(p[1] * rad) * Math.cos(p[0] * rad),
+                    Math.cos(p[1] * rad) * Math.sin(p[0] * rad),
+                    Math.sin(p[1] * rad)];
+  const A = v(a), B = v(b);
+  let punkt = A[0] * B[0] + A[1] * B[1] + A[2] * B[2];
+  punkt = Math.max(-1, Math.min(1, punkt));
+  const w = Math.acos(punkt);
+  const raus = [];
+  let vorher = null, off = 0;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    let x, y, z;
+    if (w < 1e-6) { x = A[0]; y = A[1]; z = A[2]; }
+    else {
+      const s1 = Math.sin((1 - t) * w) / Math.sin(w);
+      const s2 = Math.sin(t * w) / Math.sin(w);
+      x = s1 * A[0] + s2 * B[0];
+      y = s1 * A[1] + s2 * B[1];
+      z = s1 * A[2] + s2 * B[2];
+    }
+    let lon = Math.atan2(y, x) / rad;
+    const lat = Math.atan2(z, Math.hypot(x, y)) / rad;
+    // Datumsgrenze: fortlaufend halten, sonst springt der Bogen quer
+    // über die ganze Karte.
+    if (vorher !== null) {
+      if (lon + off - vorher > 180) off -= 360;
+      else if (lon + off - vorher < -180) off += 360;
+    }
+    lon += off;
+    vorher = lon;
+    raus.push([lon, lat]);
+  }
+  return raus;
+}
+
+/* Ein Bogen mit Höhe — das ist der räumliche Eindruck: Bodenspur unten,
+   der eigentliche Bogen darüber, plus ein Leuchten. */
+function zeichneBogen(a, b, farbe, opt) {
+  opt = opt || {};
+  const geo = grosskreis(a, b, 64);
+  const auf = geo.map((p) => view.project(p[0], p[1]));
+  const d = Math.hypot(auf[auf.length - 1][0] - auf[0][0],
+                       auf[auf.length - 1][1] - auf[0][1]);
+  const hoehe = Math.min(d * 0.30, H * 0.42) * (opt.hoehe || 1);
+  const bogen = auf.map((p, i) => {
+    const t = i / (auf.length - 1);
+    return [p[0], p[1] - Math.sin(Math.PI * t) * hoehe];
+  });
+
+  const pfad = (pts) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  };
+
+  // Bodenspur: zeigt, wo der Bogen tatsächlich langläuft
+  ctx.save();
+  ctx.globalAlpha = 0.20;
+  ctx.setLineDash([3, 5]);
+  ctx.strokeStyle = farbe;
+  ctx.lineWidth = 1;
+  pfad(auf);
+  ctx.stroke();
+  ctx.restore();
+
+  // Schein
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = farbe;
+  ctx.lineWidth = (opt.breite || 2) + 7;
+  ctx.lineCap = "round";
+  pfad(bogen);
+  ctx.stroke();
+  ctx.restore();
+
+  // Der Bogen selbst
+  ctx.strokeStyle = farbe;
+  ctx.lineWidth = opt.breite || 2;
+  ctx.lineCap = "round";
+  pfad(bogen);
+  ctx.stroke();
+
+  // Laufender Punkt in Flussrichtung
+  if (opt.now !== undefined) {
+    const t = ((opt.now / 2600) + (opt.phase || 0)) % 1;
+    const i = Math.min(bogen.length - 1, Math.floor(t * (bogen.length - 1)));
+    ctx.beginPath();
+    ctx.arc(bogen[i][0], bogen[i][1], 3.2, 0, 7);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(bogen[i][0], bogen[i][1], 6, 0, 7);
+    ctx.fillStyle = farbe;
+    ctx.globalAlpha = 0.35;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  return bogen;
+}
+
+/* Mittelpunkt des grössten Rings eines Landes — Ankerpunkt für Bögen. */
+const MITTEN = {};
+function landMitte(name) {
+  if (MITTEN[name]) return MITTEN[name];
+  const l = LAENDER.find((x) => x.n === name);
+  if (!l) return null;
+  let best = null;
+  for (const p of l.polys) {
+    const [w, s, e, n] = p.bbox;
+    const f = (e - w) * (n - s);
+    if (!best || f > best.f) best = { f: f, p: [(w + e) / 2, (s + n) / 2] };
+  }
+  MITTEN[name] = best ? best.p : null;
+  return MITTEN[name];
+}
+
+/* Bögen von einer Meerenge zu allen betroffenen Ländern. */
+function zeichneBetroffenBoegen(e, now) {
+  const gruppen = [["einfuhr", ROLLEN.einfuhr.c], ["ausfuhr", ROLLEN.ausfuhr.c]];
+  const anteile = ABHAENGIGKEIT[e.id] || {};
+  let k = 0;
+  for (const [gruppe, farbe] of gruppen) {
+    for (const l of e.betroffen[gruppe]) {
+      const m = landMitte(l.ne);
+      if (!m) continue;
+      // Je stärker die Abhängigkeit, desto dicker der Bogen. Wo keine Zahl
+      // belegt ist, bleibt es die Grundstärke — nicht geraten.
+      const a = anteile[l.ne];
+      const breite = a ? 1.2 + (a.wert / 100) * 3.4 : 1.8;
+      // Ausfuhr zeigt zur Enge hin, Einfuhr von ihr weg — die Laufrichtung
+      // des Punktes erzählt damit die Richtung der Ladung.
+      const von = gruppe === "ausfuhr" ? m : e.pos;
+      const nach = gruppe === "ausfuhr" ? e.pos : m;
+      zeichneBogen(von, nach, farbe,
+        { now: now, phase: (k++ * 0.13) % 1, breite: breite });
+    }
+  }
+}
+
+/* Bögen von den ausgewählten Ländern zu ihren Handelspartnern. */
+function zeichneAuswahlBoegen(now) {
+  let k = 0;
+  for (const name of AUSWAHL) {
+    const h = HANDEL[name];
+    const m = landMitte(name);
+    if (!h || !m) continue;
+    for (const p of h.pAus) {
+      const z = landMitte(p);
+      if (z) zeichneBogen(m, z, ROLLEN.ausfuhr.c,
+        { now: now, phase: (k++ * 0.17) % 1, breite: 2 });
+    }
+    for (const p of h.pEin) {
+      const z = landMitte(p);
+      if (z) zeichneBogen(z, m, ROLLEN.einfuhr.c,
+        { now: now, phase: (k++ * 0.17) % 1, breite: 2, hoehe: 0.78 });
+    }
+  }
+  // Ausgewählte Länder markieren
+  for (const name of AUSWAHL) {
+    const m = landMitte(name);
+    if (!m) continue;
+    const [x, y] = view.project(m[0], m[1]);
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, 7);
+    ctx.strokeStyle = "#00e676";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.font = '700 11px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#00e676";
+    ctx.letterSpacing = "1.2px";
+    halo(((HANDEL[name] && HANDEL[name].t) || name).toUpperCase(), x, y - 11);
+    ctx.letterSpacing = "0px";
+  }
 }
 
 /* ---------- Lagebild-Ebenen ---------- */
@@ -730,6 +993,15 @@ function zeichneMarken(now) {
 
     ctx.font = (ist ? "700 " : "") + '10px ui-monospace,Menlo,Consolas,monospace';
     ctx.letterSpacing = "1.2px";
+    // Live-Durchfahrten unter den Marker, wenn vorhanden.
+    if (LIVE && LIVE.werte[e.id]) {
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#00e676";
+      ctx.font = '9px ui-monospace,Menlo,Consolas,monospace';
+      halo(LIVE.werte[e.id].n + " SCHIFFE/TAG", x + 10, y + 5);
+      ctx.font = (ist ? "700 " : "") + '10px ui-monospace,Menlo,Consolas,monospace';
+    }
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     const tx = x + 10, ty = y - 9;
@@ -916,7 +1188,69 @@ function onClick(ev) {
   }
   if (modus !== "welt") return;
   const e = trefferMarke(mx, my);
-  if (e) zeigeEnge(e);
+  if (e) { zeigeEnge(e); return; }
+  // Kein Marker getroffen: dann das Land darunter aus- oder abwählen.
+  // Mehrfachauswahl ist der Normalfall — genau der Vergleich zweier Länder
+  // ist ja die interessante Frage.
+  const [lon, lat] = view.invert(mx, my);
+  const name = landBei(((lon + 180) % 360 + 360) % 360 - 180, lat);
+  if (!name) { AUSWAHL.clear(); malAuswahl(); return; }
+  AUSWAHL.has(name) ? AUSWAHL.delete(name) : AUSWAHL.add(name);
+  malAuswahl();
+}
+
+/* Auswahlleiste und Panel neu aufbauen. */
+function malAuswahl() {
+  const leiste = document.getElementById("auswahl");
+  document.body.dataset.auswahl = AUSWAHL.size ? "ja" : "nein";
+  leiste.innerHTML = AUSWAHL.size
+    ? '<span class="tit">AUSWAHL</span>' +
+      [...AUSWAHL].map((n) =>
+        '<button class="chip" data-l="' + n + '">' +
+        ((HANDEL[n] && HANDEL[n].t) || n) + ' <span>×</span></button>').join("") +
+      '<button class="chip leer">ALLE LÖSCHEN</button>'
+    : "";
+  leiste.querySelectorAll(".chip").forEach((c) => {
+    c.onclick = () => {
+      c.classList.contains("leer") ? AUSWAHL.clear() : AUSWAHL.delete(c.dataset.l);
+      malAuswahl();
+    };
+  });
+  if (AUSWAHL.size) bauHandelPanel();
+}
+
+function bauHandelPanel() {
+  const liste = (t, arr) =>
+    '<div class="hz"><span class="hk">' + t + '</span><span class="hv">' +
+    arr.join(" · ") + "</span></div>";
+  const namen = (arr) => arr.map((n) => (HANDEL[n] && HANDEL[n].t) || n);
+  document.getElementById("panel").innerHTML =
+    '<h2>Handelsprofile</h2><div class="reg">' + AUSWAHL.size +
+    " Land(e) ausgewählt</div>" +
+    [...AUSWAHL].map((n) => {
+      const h = HANDEL[n];
+      if (!h) {
+        return '<div class="hbox"><h3>' + n + "</h3><p>" + HANDEL_FEHLT + "</p></div>";
+      }
+      // An welchen Engen hängt das Land, und wie stark?
+      const engen = h.engen.map((id) => {
+        const e = ENGEN.find((x) => x.id === id);
+        const a = (ABHAENGIGKEIT[id] || {})[n];
+        const st = STATUS[id] ? STATUS_FARBEN[STATUS[id].s].c : "#8fa6a0";
+        return '<div class="eng"><span class="pkt" style="background:' + st +
+          '"></span><b>' + (e ? e.name : id) + "</b>" +
+          (a ? '<span class="pct">' + a.wert + " % " + a.was + "</span>" +
+               '<span class="qq">' + a.q + "</span>"
+             : '<span class="qq">Anteil nicht belegt</span>') + "</div>";
+      }).join("");
+      return '<div class="hbox"><h3>' + h.t + "</h3>" +
+        '<p class="kern">' + h.kern + "</p>" +
+        liste("Ausfuhr", h.aus) + liste("Einfuhr", h.ein) +
+        liste("Abnehmer", namen(h.pAus)) + liste("Lieferanten", namen(h.pEin)) +
+        '<div class="hz"><span class="hk">Engpässe</span></div>' + engen +
+        "</div>";
+    }).join("") +
+    '<div class="quelle">' + HANDEL_QUELLE + "</div>";
 }
 
 /* ---------- Ebenen-Schaltpult ---------- */
@@ -978,9 +1312,14 @@ function bauStatuslegende() {
 /* ---------- Panel und Liste ---------- */
 
 function bauLegende(e) {
-  const zaehl = { kontrolle: e.betroffen.kontrolle.length,
-                  ausfuhr: e.betroffen.ausfuhr.length,
-                  einfuhr: e.betroffen.einfuhr.length };
+  // Aus derselben Quelle zählen, aus der auch gefärbt wird — sonst weicht
+  // die Legende von der Karte ab, sobald sich die Kaskade ändert.
+  const vorher = [modus, ansicht, aktiv];
+  modus = "detail"; ansicht = "betroffen"; aktiv = e;
+  const rollen = rollenKarte();
+  modus = vorher[0]; ansicht = vorher[1]; aktiv = vorher[2];
+  const zaehl = { kontrolle: 0, ausfuhr: 0, einfuhr: 0, folge: 0 };
+  for (const n of Object.keys(rollen)) zaehl[rollen[n]]++;
   document.getElementById("legende").innerHTML =
     Object.keys(ROLLEN).map((k) =>
       '<div class="z"><i style="background:' + ROLLEN[k].fill +
@@ -1000,6 +1339,10 @@ function bauPanel(e) {
       zeile("Breite", e.breite) +
       zeile("Verkehr", e.menge) +
       zeile("Anrainer", e.anrainer) +
+      (LIVE && LIVE.werte[e.id] ? zeile("Live",
+        '<b style="color:var(--phos)">' + LIVE.werte[e.id].n +
+        " Schiffe/Tag</b><br><span style=\"color:var(--dim)\">Stand " +
+        LIVE.werte[e.id].d + " · IMF PortWatch</span>") : "") +
       (STATUS[e.id] ? zeile("Status",
         '<span style="color:' + STATUS_FARBEN[STATUS[e.id].s].c + '">■ ' +
         STATUS_FARBEN[STATUS[e.id].s].t + "</span><br>" + STATUS[e.id].b) : "") +

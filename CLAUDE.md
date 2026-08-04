@@ -58,6 +58,18 @@ Siehe `README.md` für Aufbau und Bedienung.
   Seite ausserhalb des eigenen Bildschirms missverständlich.
 - Beim Zoomen die Theaterflächen dämpfen, sonst überdecken sie die Karte.
 
+## Handel und Abhängigkeit
+
+- Inhalte in `static/handel.js`. **Keine erfundenen Zahlen.** Warenstruktur
+  steht als Rangfolge da, nicht in Prozent — belastbare bilaterale Zahlen
+  liegen nicht vor, und geraten wäre schlimmer als weggelassen.
+- `ABHAENGIGKEIT` ist die eigentlich wertvolle Angabe (wie stark hängt ein
+  Land an einer Enge). Jeder Eintrag nennt, worauf sich der Anteil bezieht,
+  und einen Beleg. Wo nichts belegt ist, steht "Anteil nicht belegt".
+- Die zweite Reihe der Betroffenen wird **abgeleitet**, nicht gepflegt.
+- Live-Abruf (IMF PortWatch) in `serve.py`: fällt er aus, muss das im UI
+  sichtbar sein (`LIVE: AUS`) — nie stillschweigend auf Alt-Daten fallen.
+
 ## Server-Umgebung — geteilter Droplet (falls je deployt wird)
 
 Der Droplet `ubuntu-s-1vcpu-1gb-fra1` (Frankfurt) hostet **mehrere Projekte**:

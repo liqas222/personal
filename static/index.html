@@ -82,6 +82,7 @@ body:not([data-modus="detail"]) #ansichten{display:none}
 #legende .z:last-of-type{margin-bottom:0}
 #legende i{width:13px;height:13px;border-radius:3px;flex:none;
   border:1.5px solid}
+body:not([data-modus="detail"]) #legende{display:none}
 #legende .hw{margin-top:9px;padding-top:9px;border-top:1px solid var(--rand);
   color:var(--dim);line-height:1.45}
 #hinweis{position:absolute;bottom:14px;left:14px;color:var(--dim);font-size:11px;
@@ -124,6 +125,36 @@ body[data-modus="liste"] #ebenen,body[data-modus="quiz"] #ebenen{display:none}
 #statuslegende .z:last-child{margin-bottom:0}
 #statuslegende i{width:9px;height:9px;flex:none;border-radius:50%}
 body:not([data-modus="welt"]) #statuslegende{display:none}
+
+/* Auswahlleiste */
+#auswahl{position:absolute;bottom:14px;left:14px;right:290px;display:flex;
+  flex-wrap:wrap;align-items:center;gap:6px}
+body[data-auswahl="nein"] #auswahl{display:none}
+#auswahl .tit{color:var(--dim);font-size:10px;letter-spacing:2px;margin-right:4px}
+#auswahl .chip{background:#0a1a12e8;border:1px solid #1f5a3e;color:var(--phos);
+  font:inherit;font-size:11px;letter-spacing:.8px;padding:4px 9px;cursor:pointer}
+#auswahl .chip:hover{background:#13301f;border-color:var(--phos)}
+#auswahl .chip span{color:var(--dim);margin-left:3px}
+#auswahl .chip.leer{border-color:#4a2a2a;color:#ff8a8a}
+body[data-auswahl="ja"] #hinweis{display:none}
+/* Bei Auswahl das Panel auch in der Weltkarte zeigen */
+body[data-modus="welt"][data-auswahl="ja"] #panel{display:block}
+
+/* Handelsprofile im Panel */
+.hbox{border-top:1px solid var(--rand);padding-top:14px;margin-top:16px}
+.hbox h3{margin:0 0 6px;font-size:15px;color:var(--phos);letter-spacing:1px}
+.hbox .kern{color:var(--ink2);font-size:12px;margin:0 0 11px;line-height:1.5}
+.hz{display:flex;gap:9px;padding:4px 0;font-size:12px;align-items:baseline}
+.hk{color:var(--dim);flex:none;width:84px;font-size:10px;letter-spacing:1.2px;
+  text-transform:uppercase}
+.hv{color:var(--ink);flex:1}
+.eng{display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:5px 0 5px 93px;
+  font-size:12px;color:var(--ink)}
+.eng .pkt{width:7px;height:7px;border-radius:50%;flex:none}
+.eng .pct{color:var(--amber);font-weight:700}
+.eng .qq{flex-basis:100%;color:var(--dim);font-size:10px;padding-left:14px}
+.quelle{margin-top:20px;padding-top:12px;border-top:1px solid var(--rand);
+  color:var(--dim);font-size:10px;line-height:1.5}
 
 /* Seitenpanel */
 #panel{width:400px;flex:none;border-left:1px solid var(--rand);background:var(--panel);
@@ -242,6 +273,7 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
     <div id="hinweis">Marker anwählen für Detailaufklärung.</div>
     <div id="ebenen"></div>
     <div id="statuslegende"></div>
+    <div id="auswahl"></div>
   </div>
   <div id="liste"></div>
   <aside id="panel"></aside>
@@ -264,6 +296,8 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
   <div class="f">AKTIVE THEATER: <b id="lgTheater">4</b></div>
   <div class="f krit">CHOKEPOINT STATUS: <b>KRITISCH</b></div>
   <div class="f">EBENEN AKTIV: <b id="lgEbenen">2 / 6</b></div>
+  <div class="f" title="Tägliche Durchfahrten je Meerenge">LIVE:
+    <span id="lgLive"><b style="color:var(--dim)">…</b></span></div>
   <div class="f rechts">QUELLE: OFFEN · BEWERTUNG, KEINE MELDUNG</div>
 </div>
 
@@ -276,6 +310,7 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 <script src="geo.js"></script>
 <script src="data.js"></script>
 <script src="lagen.js"></script>
+<script src="handel.js"></script>
 <script src="atlas.js"></script>
 </body>
 </html>

@@ -51,6 +51,7 @@ Standardbibliothek. Copy-Paste-Befehle stehen in `DEPLOY.md`.
 | `static/geo.js` | Ringe dekodieren, Mercator-Projektion, Entfernungen |
 | `static/data.js` | **Die Inhalte** — Meerengen, Fakten, Seewege, Quellen |
 | `static/lagen.js` | **Das Lagebild** — Konflikte, Ziele, Status, Vektoren |
+| `static/handel.js` | **Handelsprofile** — Waren, Partner, Abhängigkeitsanteile |
 | `static/atlas.js` | Zeichnen auf Canvas, Zoomflug, Klicks, Quiz |
 | `static/world.js` | Erzeugte Kartengeometrie (nicht von Hand ändern) |
 | `tools/build_map.py` | Erzeugt `world.js` aus den Natural-Earth-Daten |
@@ -124,6 +125,41 @@ Rasterzeile Höhe, die das Runden erzeugt) fallen weg.
 **Grenze der Daten:** Natural Earth schneidet sehr schmale Kanäle in den
 Länderpolygonen nicht aus. Der Bosporus ist dort massives Land, egal welche
 Auflösung — deshalb die `kanal`-Kennzeichnung statt feinerer Daten.
+
+## Länder anklicken
+
+Auf der Lagekarte lässt sich jedes Land anklicken — mehrere gleichzeitig. Für
+jedes ausgewählte Land zeigen Bögen die Handelspartner (orange hinaus, blau
+herein), das Panel listet Warenstruktur, Partner und die Meerengen, an denen
+das Land hängt. Ein Klick ins Meer löscht die Auswahl.
+
+In der Ansicht „Wer hängt daran" laufen dieselben Bögen von der Meerenge zu
+den betroffenen Ländern. **Die Dicke des Bogens entspricht der
+Abhängigkeit**, und am Land steht der Anteil: Japan bezieht rund 90 % seines
+Rohöls über Hormuz, Indien rund 40 % — dieselbe Enge, zwei völlig
+verschiedene Lagen.
+
+Zusätzlich wird die **zweite Reihe** eingefärbt: Länder, die nicht selbst an
+der Enge hängen, aber an einem Land, das dort hängt. Die Liste wird aus den
+Handelspartnern der ersten Reihe abgeleitet, nicht von Hand gepflegt.
+
+## Live-Daten
+
+`serve.py` holt alle sechs Stunden die täglichen Durchfahrten je Meerenge von
+**IMF PortWatch** (offen zugänglich) und legt sie unter `/api/live` ab. Die
+Zahlen erscheinen unter den Markern und im Detailpanel.
+
+Fällt der Abruf aus, zeigt die Statusleiste `LIVE: AUS` — der Atlas bleibt
+vollständig nutzbar, aber der Ausfall ist sichtbar und nicht still. Status
+prüfen:
+
+```bash
+curl -s http://127.0.0.1/api/live | head -c 300
+```
+
+**Grenze:** Bilaterale Handelsdaten in Echtzeit gibt es nicht kostenlos. Die
+Warenstruktur und die Abhängigkeitsanteile in `handel.js` sind kuratiert und
+mit Quelle versehen, nicht live.
 
 ## Ebenen ergänzen
 

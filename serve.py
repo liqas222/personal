@@ -15,6 +15,10 @@ import hmac
 import json
 import os
 import sys
+import threading
+import time
+import urllib.error
+import urllib.request
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -39,6 +43,109 @@ def load_config():
 
 CFG = load_config()
 
+# ---------------------------------------------------------------------------
+# Live-Daten: tägliche Schiffsdurchfahrten je Meerenge (IMF PortWatch, offen).
+#
+# EHRLICH ZUR EINORDNUNG: Handelsdaten in Echtzeit für jedes Land gibt es
+# nicht kostenlos. Was es gibt, ist die tägliche Zahl der Durchfahrten je
+# Chokepoint — und die ist für diesen Atlas die aussagekräftigste Live-Zahl:
+# man sieht unmittelbar, ob eine Enge gemieden wird.
+#
+# Fällt der Abruf aus, bleibt der Atlas vollständig nutzbar; die Oberfläche
+# zeigt dann "LIVE: aus". Kein stiller Ausfall.
+# ---------------------------------------------------------------------------
+
+PORTWATCH_URL = os.environ.get(
+    "ATLAS_PORTWATCH_URL",
+    "https://services9.arcgis.com/weJ1QsnbMYJlCHdG/arcgis/rest/services/"
+    "Daily_Chokepoints_Data/FeatureServer/0/query"
+    "?where=1%3D1&outFields=portname,date,n_total&resultRecordCount=2000"
+    "&orderByFields=date%20DESC&f=json")
+
+# Namen bei PortWatch -> ids im Atlas
+CHOKE_NAMEN = {
+    "strait of hormuz": "hormuz",
+    "bab el-mandeb strait": "babelmandeb",
+    "suez canal": "suez",
+    "strait of malacca": "malakka",
+    "taiwan strait": "taiwan",
+    "bosporus strait": "bosporus",
+    "panama canal": "panama",
+    "strait of gibraltar": "gibraltar",
+}
+
+CACHE = os.path.join(BASE, "data", "live.json")
+LIVE = {"stand": None, "quelle": "IMF PortWatch", "werte": {}, "fehler": None}
+
+
+def _cache_laden():
+    try:
+        with open(CACHE) as f:
+            LIVE.update(json.load(f))
+    except Exception:
+        pass
+
+
+def _cache_schreiben():
+    try:
+        os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+        tmp = CACHE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(LIVE, f)
+        os.replace(tmp, CACHE)
+    except OSError:
+        pass
+
+
+def hole_live():
+    """Holt die Durchfahrten und legt sie in LIVE ab. Wirft nie."""
+    try:
+        req = urllib.request.Request(
+            PORTWATCH_URL, headers={"User-Agent": "atlas/1.0"})
+        with urllib.request.urlopen(req, timeout=25) as r:
+            roh = json.loads(r.read().decode("utf-8", "replace"))
+    except (urllib.error.URLError, ValueError, OSError) as e:
+        LIVE["fehler"] = "%s: %s" % (type(e).__name__, e)
+        return False
+
+    merkmale = roh.get("features")
+    if not isinstance(merkmale, list):
+        LIVE["fehler"] = "Unerwartete Antwort — kein Feld 'features'."
+        return False
+
+    # Je Enge den jüngsten Eintrag behalten.
+    werte, stand = {}, None
+    for m in merkmale:
+        a = (m or {}).get("attributes") or {}
+        name = str(a.get("portname", "")).strip().lower()
+        eid = CHOKE_NAMEN.get(name)
+        if not eid:
+            continue
+        datum, n = a.get("date"), a.get("n_total")
+        if datum is None or n is None:
+            continue
+        if eid not in werte or datum > werte[eid]["d"]:
+            werte[eid] = {"d": datum, "n": round(float(n), 1)}
+        stand = max(stand, datum) if stand else datum
+
+    if not werte:
+        LIVE["fehler"] = "Antwort enthielt keine bekannten Chokepoints."
+        return False
+    LIVE.update({"werte": werte, "stand": stand, "fehler": None,
+                 "geholt": int(time.time())})
+    _cache_schreiben()
+    return True
+
+
+def live_schleife():
+    """Einmal beim Start, danach alle sechs Stunden."""
+    while True:
+        hole_live()
+        time.sleep(6 * 3600)
+
+
+_cache_laden()
+
 
 class Handler(SimpleHTTPRequestHandler):
     # Keep-alive: die Seite lädt vier Dateien, darunter die 218 KB grosse
@@ -47,6 +154,15 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if not self.pruefe_auth():
+            return
+        if self.path.split("?")[0] == "/api/live":
+            koerper = json.dumps(LIVE).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(koerper)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(koerper)
             return
         super().do_GET()
 
@@ -93,10 +209,12 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
+    threading.Thread(target=live_schleife, daemon=True).start()
     handler = partial(Handler, directory=STATIC)
     srv = ThreadingHTTPServer((CFG["host"], int(CFG["port"])), handler)
     schutz = "mit Passwort" if CFG.get("auth_token") else "OHNE Passwort"
     print("Atlas läuft auf %s:%s (%s)" % (CFG["host"], CFG["port"], schutz))
+    print("Live-Daten: IMF PortWatch, Abruf alle 6 h — Status unter /api/live")
     srv.serve_forever()
 
 
