@@ -114,7 +114,10 @@ def hole_live():
         LIVE["fehler"] = "Unerwartete Antwort — kein Feld 'features'."
         return False
 
-    # Je Enge den jüngsten Eintrag behalten.
+    # Je Enge den jüngsten Wert UND einen Vergleichswert der Vorwochen
+    # sammeln. Ohne Vergleich sagt eine Tageszahl nichts: 61 Schiffe sind
+    # nur dann eine Meldung, wenn sonst 90 fahren.
+    reihen = {}
     werte, stand = {}, None
     for m in merkmale:
         a = (m or {}).get("attributes") or {}
@@ -125,9 +128,22 @@ def hole_live():
         datum, n = a.get("date"), a.get("n_total")
         if datum is None or n is None:
             continue
+        reihen.setdefault(eid, []).append((datum, float(n)))
         if eid not in werte or datum > werte[eid]["d"]:
             werte[eid] = {"d": datum, "n": round(float(n), 1)}
         stand = max(stand, datum) if stand else datum
+
+    # Vergleichswert: Median der 60 Tage vor dem jüngsten. Median statt
+    # Mittelwert, damit einzelne Ausreisser ihn nicht verziehen.
+    for eid, reihe in reihen.items():
+        reihe.sort(reverse=True)
+        vor = sorted(v for _, v in reihe[1:61])
+        if len(vor) >= 10:
+            m = vor[len(vor) // 2]
+            werte[eid]["mittel"] = round(m, 1)
+            werte[eid]["tage"] = len(vor)
+            if m > 0:
+                werte[eid]["abw"] = round((werte[eid]["n"] - m) / m * 100)
 
     if not werte:
         LIVE["fehler"] = "Antwort enthielt keine bekannten Chokepoints."
@@ -146,14 +162,13 @@ def live_schleife():
 
 
 # ---------------------------------------------------------------------------
-# X-Konten verfolgen und Beiträge auswerten.
+# Telegram-Kanäle verfolgen und Nachrichten auswerten.
 #
-# WICHTIG: Das Lesen von Beiträgen erfordert bei X einen kostenpflichtigen
-# API-Zugang. Ohne Zugangstoken bleibt diese Ebene schlicht aus — sichtbar,
-# nicht heimlich. In config.json:
+# Die Telegram-Bot-API ist kostenlos — anders als das Lesen bei X. Ohne
+# Token bleibt diese Ebene schlicht aus, sichtbar und nicht heimlich.
+# In config.json:
 #
-#   "x_bearer": "AAAA...",              Bearer-Token
-#   "x_konten": ["Konto1", "Konto2"]    ohne @
+#   "tg_token": "123456:ABC..."   von @BotFather, kostenlos
 #
 # Ausgewertet wird bewusst simpel und nachvollziehbar: Beiträge werden nach
 # Stichworten den Meerengen zugeordnet. Keine Stimmungsanalyse und keine
@@ -161,9 +176,9 @@ def live_schleife():
 # zu tun wäre irreführend.
 # ---------------------------------------------------------------------------
 
-X_API = "https://api.x.com/2"
+TG_API = "https://api.telegram.org/bot"
 
-X_STICH = {
+TG_STICH = {
     "hormuz": ["hormuz", "hormus", "persian gulf", "persischer golf"],
     "babelmandeb": ["bab el-mandeb", "bab al-mandab", "bab-el-mandeb",
                     "red sea", "rotes meer", "houthi", "huthi"],
@@ -182,59 +197,67 @@ FEED = {"stand": None, "beitraege": [], "konten": [],
 FEED_CACHE = os.path.join(BASE, "data", "feed.json")
 
 
-def _x_get(pfad, params):
-    url = X_API + pfad + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={
-        "Authorization": "Bearer " + CFG["x_bearer"],
-        "User-Agent": "atlas/1.0"})
-    with urllib.request.urlopen(req, timeout=25) as r:
+def _tg_get(methode, params):
+    url = TG_API + CFG["tg_token"] + "/" + methode + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": "atlas/1.0"})
+    with urllib.request.urlopen(req, timeout=35) as r:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
 def zuordnen(text):
     """Welche Meerengen kommen in diesem Text vor?"""
     t = text.lower()
-    return [eid for eid, worte in X_STICH.items() if any(w in t for w in worte)]
+    return [eid for eid, worte in TG_STICH.items() if any(w in t for w in worte)]
 
 
 def hole_feed():
-    konten = CFG.get("x_konten") or []
-    if not CFG.get("x_bearer") or not konten:
-        FEED.update({"fehler": "nicht eingerichtet", "beitraege": [],
-                     "konten": konten})
+    """Holt neue Telegram-Nachrichten und ordnet sie den Meerengen zu.
+
+    Der Bot sieht nur Kanäle und Gruppen, in denen er selbst Mitglied ist.
+    Für einen fremden Kanal, den man nur liest, geht das nicht — dort leitet
+    man die interessanten Nachrichten in eine eigene Gruppe weiter, in der
+    der Bot sitzt. Das ist der praktikable Weg und kostet nichts.
+    """
+    if not CFG.get("tg_token"):
+        FEED.update({"fehler": "nicht eingerichtet", "beitraege": []})
         return False
     try:
-        # Eine Abfrage für alle Konten zusammen — bei den engen Kontingenten
-        # der X-API ist das der entscheidende Punkt.
-        von = " OR ".join("from:" + k.lstrip("@") for k in konten[:20])
-        d = _x_get("/tweets/search/recent", {
-            "query": "(" + von + ") -is:retweet",
-            "max_results": 100,
-            "tweet.fields": "created_at,author_id",
-            "expansions": "author_id",
-            "user.fields": "username",
+        d = _tg_get("getUpdates", {
+            "offset": FEED.get("offset", 0),
+            "timeout": 0,
+            "limit": 100,
+            "allowed_updates": json.dumps(["message", "channel_post"]),
         })
-    except Exception as e:      # Netz, Auth, Kontingent — alles gleich
+    except Exception as e:
         FEED.update({"fehler": "%s: %s" % (type(e).__name__, e)})
         return False
-
-    if d.get("errors") and not d.get("data"):
-        FEED.update({"fehler": str(d["errors"])[:200]})
+    if not d.get("ok"):
+        FEED.update({"fehler": str(d.get("description"))[:200]})
         return False
 
-    namen = {u["id"]: u["username"]
-             for u in (d.get("includes") or {}).get("users", [])}
-    raus = []
-    for t in d.get("data") or []:
-        text = t.get("text", "")
-        raus.append({"id": t.get("id"),
-                     "konto": namen.get(t.get("author_id"), "?"),
-                     "zeit": t.get("created_at"),
-                     "text": text,
-                     "engen": zuordnen(text)})
-    raus.sort(key=lambda b: b["zeit"] or "", reverse=True)
-    FEED.update({"beitraege": raus[:60], "konten": konten, "fehler": None,
-                 "stand": raus[0]["zeit"] if raus else None})
+    alt = FEED.get("beitraege", [])
+    neu = []
+    letzte = FEED.get("offset", 0)
+    for u in d.get("result", []):
+        letzte = max(letzte, u.get("update_id", 0) + 1)
+        m = u.get("channel_post") or u.get("message") or {}
+        text = m.get("text") or m.get("caption") or ""
+        if not text:
+            continue
+        chat = m.get("chat") or {}
+        neu.append({
+            "id": str(chat.get("id")) + ":" + str(m.get("message_id")),
+            "konto": chat.get("title") or chat.get("username") or "Direktnachricht",
+            "zeit": time.strftime("%Y-%m-%dT%H:%M",
+                                  time.gmtime(m.get("date", time.time()))),
+            "text": text[:600],
+            "engen": zuordnen(text),
+        })
+    zusammen = (neu + alt)[:120]
+    FEED.update({"beitraege": zusammen, "offset": letzte, "fehler": None,
+                 "quelle": "Telegram",
+                 "konten": sorted({b["konto"] for b in zusammen}),
+                 "stand": zusammen[0]["zeit"] if zusammen else None})
     try:
         with open(FEED_CACHE, "w") as f:
             json.dump(FEED, f)
@@ -244,10 +267,10 @@ def hole_feed():
 
 
 def feed_schleife():
-    """Alle 15 Minuten — schont das Kontingent."""
+    """Alle zwei Minuten — Telegram kostet nichts."""
     while True:
         hole_feed()
-        time.sleep(15 * 60)
+        time.sleep(120)
 
 
 def _feed_cache_laden():
@@ -333,8 +356,8 @@ def main():
     schutz = "mit Passwort" if CFG.get("auth_token") else "OHNE Passwort"
     print("Atlas läuft auf %s:%s (%s)" % (CFG["host"], CFG["port"], schutz))
     print("Live-Daten: IMF PortWatch, Abruf alle 6 h — Status unter /api/live")
-    print("X-Konten: %s — Status unter /api/feed"
-          % (", ".join(CFG.get("x_konten") or []) or "keine eingerichtet"))
+    print("Telegram: %s — Status unter /api/feed"
+          % ("Bot eingerichtet" if CFG.get("tg_token") else "kein Token"))
     srv.serve_forever()
 
 

@@ -402,10 +402,15 @@ async function holeLive() {
     const r = await fetch("api/live", { cache: "no-store" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
-    if (d.fehler || !d.stand) throw new Error(d.fehler || "keine Daten");
+    // Zwischengespeicherte Werte nicht wegwerfen, nur weil der letzte Abruf
+    // gestört war — sie bleiben brauchbar, müssen aber als solche
+    // gekennzeichnet sein.
+    const hatWerte = d.werte && Object.keys(d.werte).length;
+    if (!hatWerte) throw new Error(d.fehler || "keine Daten");
     LIVE = d;
-    feld.innerHTML = '<b style="color:var(--phos)">' + d.stand + "</b>";
-    feld.title = d.quelle;
+    feld.innerHTML = '<b style="color:' + (d.fehler ? "var(--amber)" : "var(--phos)") +
+      '">' + d.stand + (d.fehler ? " · ABRUF GESTÖRT" : "") + "</b>";
+    feld.title = d.quelle + (d.fehler ? " — letzter Abruf: " + d.fehler : "");
     basisSchluessel = "";
   } catch (e) {
     LIVE = null;
@@ -415,7 +420,36 @@ async function holeLive() {
   }
 }
 
-/* Beiträge der verfolgten X-Konten. Ohne eingerichteten Zugang bleibt die
+/* Status einer Meerenge: die Bewertung aus lagen.js ist von Hand gesetzt und
+   veraltet. Wo Live-Zahlen vorliegen, wird daraus ein eigener Status
+   abgeleitet und der SCHLECHTERE der beiden genommen — die Zahlen sehen den
+   Verkehrseinbruch, die Bewertung kennt den militärischen Zusammenhang.
+   Welcher gewonnen hat, steht im Panel. */
+const RANG = { gruen: 0, amber: 1, rot: 2 };
+
+function statusVon(id) {
+  const hand = STATUS[id];
+  const w = LIVE && LIVE.werte ? LIVE.werte[id] : null;
+  if (!w || w.abw === undefined) {
+    return hand ? { s: hand.s, b: hand.b, quelle: "Bewertung, " + STAND } : null;
+  }
+  // Verkehr weit unter dem Normalwert heisst: die Enge wird gemieden.
+  const abw = w.abw;
+  const ausZahl = abw <= -35 ? "rot" : abw <= -15 ? "amber" : "gruen";
+  const zahlText = "Durchfahrten " + w.n + "/Tag gegenüber sonst " + w.mittel +
+    " (" + (abw > 0 ? "+" : "") + abw + " %).";
+  if (!hand) return { s: ausZahl, b: zahlText, quelle: "aus Live-Zahlen" };
+  const schlechter = RANG[ausZahl] >= RANG[hand.s] ? ausZahl : hand.s;
+  return {
+    s: schlechter,
+    b: zahlText + " " + hand.b,
+    quelle: RANG[ausZahl] > RANG[hand.s] ? "aus Live-Zahlen hochgestuft"
+      : RANG[ausZahl] < RANG[hand.s] ? "Bewertung, " + STAND + " (Zahlen wären milder)"
+      : "Zahlen und Bewertung stimmen überein",
+  };
+}
+
+/* Beiträge aus den verfolgten Telegram-Kanälen. Ohne eingerichteten Zugang bleibt die
    Anzeige sichtbar leer statt stillschweigend zu fehlen. */
 async function holeFeed() {
   const feld = document.getElementById("lgFeed");
@@ -1059,14 +1093,15 @@ function zeichneMarken(now) {
     }
 
     // Farbe nach Chokepoint-Status, wenn die Ebene an ist — sonst neutral.
-    const st = AN.status && STATUS[e.id] ? STATUS_FARBEN[STATUS[e.id].s].c : F.markeAus;
+    const sv = AN.status ? statusVon(e.id) : null;
+    const st = sv ? STATUS_FARBEN[sv.s].c : F.markeAus;
     const r = ist ? 7 * puls : 5.5;
     ctx.strokeStyle = st;
     ctx.lineWidth = 1.8;
     ctx.strokeRect(x - r, y - r, r * 2, r * 2);
     ctx.fillStyle = st;
     ctx.fillRect(x - 2, y - 2, 4, 4);
-    if (AN.status && STATUS[e.id] && STATUS[e.id].s !== "gruen") {
+    if (sv && sv.s !== "gruen") {
       // Bedrohte Engen bekommen einen laufenden Ring — faellt im
       // Randbereich des Blickfelds auf, ohne die Karte zuzukleistern.
       ctx.globalAlpha = 0.75 - 0.55 * (puls - 0.65);
@@ -1603,9 +1638,13 @@ function bauPanel(e) {
         '<b style="color:var(--phos)">' + LIVE.werte[e.id].n +
         " Schiffe/Tag</b><br><span style=\"color:var(--dim)\">Stand " +
         LIVE.werte[e.id].d + " · IMF PortWatch</span>") : "") +
-      (STATUS[e.id] ? zeile("Status",
-        '<span style="color:' + STATUS_FARBEN[STATUS[e.id].s].c + '">■ ' +
-        STATUS_FARBEN[STATUS[e.id].s].t + "</span><br>" + STATUS[e.id].b) : "") +
+      (statusVon(e.id) ? (function (sv) {
+        return zeile("Status",
+          '<span style="color:' + STATUS_FARBEN[sv.s].c + '">■ ' +
+          STATUS_FARBEN[sv.s].t + "</span><br>" + sv.b +
+          '<br><span style="color:var(--dim);font-size:10px">Quelle: ' +
+          sv.quelle + "</span>");
+      })(statusVon(e.id)) : "") +
       zeile("Kontrolle", e.betroffen.kontrolle
         .map((k) => "<b>" + k.t + "</b> — " + k.rolle).join("<br>")) +
     "</div>" +
