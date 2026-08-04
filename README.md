@@ -28,6 +28,10 @@ python3 -m http.server 8899 --directory static
 Kartendaten liegen bewusst als `.js`-Datei vor und nicht als JSON, damit kein
 `fetch()` und damit kein Webserver nötig ist.
 
+Für den Betrieb auf einem Server liegt `serve.py` bei: liefert `static/` aus,
+optional hinter HTTP-Basic-Auth (`auth_token` in `config.json`). Ebenfalls nur
+Standardbibliothek. Copy-Paste-Befehle stehen in `DEPLOY.md`.
+
 ## Aufbau
 
 | Datei | Zweck |
@@ -39,6 +43,8 @@ Kartendaten liegen bewusst als `.js`-Datei vor und nicht als JSON, damit kein
 | `static/world.js` | Erzeugte Kartengeometrie (nicht von Hand ändern) |
 | `tools/build_map.py` | Erzeugt `world.js` aus den Natural-Earth-Daten |
 | `data/` | Quelldaten (Natural Earth 1:50 m, Public Domain) |
+| `serve.py` | Auslieferung mit optionalem Passwortschutz |
+| `deploy/atlas.service` | systemd-Unit |
 
 Reine Standardbibliothek auf beiden Seiten: Python ohne pip, JavaScript ohne
 Framework. Die Karte ist handgezeichnetes Canvas, kein Leaflet, kein D3.
