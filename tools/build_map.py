@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Erzeugt static/world.js aus den Natural-Earth-Daten.
 
-Eingabe ist eine TopoJSON-Datei (data/ne_countries_50m.topo.json, Public
+Eingabe ist eine TopoJSON-Datei (data/ne_countries_10m.topo.json, Public
 Domain). Ausgabe ist eine JS-Datei, die per <script src> geladen wird — damit
 laeuft der Atlas auch per Doppelklick vom Dateisystem, ohne Webserver und ohne
 fetch(). Nur Standardbibliothek.
@@ -12,12 +12,22 @@ import json
 import os
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(BASE, "data", "ne_countries_50m.topo.json")
+SRC = os.path.join(BASE, "data", "ne_countries_10m.topo.json")
 OUT = os.path.join(BASE, "static", "world.js")
 
 # Aufloesung der Ausgabe in Grad. 0.02 ist ca. 2 km am Aequator — fuer eine
 # Uebersichtskarte mehr als genug und rund viermal kleiner als das Original.
-GRID = 0.02
+GRID = 0.015
+
+# Ringe, die in beiden Richtungen kleiner sind als das, fallen weg (Grad).
+MIN_INSEL = 0.05
+
+# Mindestflaeche eines Rings in Quadratgrad. Das Runden aufs Raster erzeugt
+# entartete Splitter — Streifen von einer Rasterzeile Hoehe, die im Bild
+# unsichtbar sind, aber die Seewegsuche in die Irre fuehren, weil sie als
+# Land zaehlen. Rund 0.0004 entspricht etwa 5 km2; die Insel Perim in
+# Bab el-Mandeb ist deutlich groesser und bleibt erhalten.
+MIN_FLAECHE = 0.0004
 
 
 def decode_arcs(topo):
@@ -112,8 +122,21 @@ def main():
             pts = simplify(ring_points(arc_idx, arcs))
             # Unter vier Punkten bleibt keine Flaeche uebrig — Splitter aus
             # dem Runden, die nur Bytes kosten.
-            if len(pts) >= 4:
-                ringe.append(encode(pts))
+            if len(pts) < 4:
+                continue
+            # Winzige Inseln weglassen. Der engste Ausschnitt im Atlas ist
+            # rund 1.5 Grad breit; darunter liegende Splitter waeren dort
+            # wenige Pixel gross, kosten aber Ladezeit und Bildrate.
+            xs = [p[0] for p in pts]
+            ys = [p[1] for p in pts]
+            if max(xs) - min(xs) < MIN_INSEL and max(ys) - min(ys) < MIN_INSEL:
+                continue
+            # Gauss'sche Trapezformel
+            flaeche = abs(sum(pts[i][0] * pts[i - 1][1] - pts[i - 1][0] * pts[i][1]
+                              for i in range(len(pts)))) / 2
+            if flaeche < MIN_FLAECHE:
+                continue
+            ringe.append(encode(pts))
         if not ringe:
             continue
         laender.append({

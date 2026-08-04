@@ -58,11 +58,37 @@ const ENGEN = [
       { t: "Golf von Oman", p: [58.2, 25.2], k: "wasser" },
       { t: "Bandar Abbas", p: [56.28, 27.18], k: "stadt" },
     ],
+    betroffen: {
+      bbox: [20, 0, 135, 50],
+      hinweis:
+        "Auf der einen Seite die Förderstaaten am Golf, auf der anderen die grossen Abnehmer in Asien. Beide sitzen in derselben Falle: Es gibt keinen zweiten Ausgang.",
+      kontrolle: [
+        { ne: "Iran", t: "Iran", rolle: "Nordufer, Inseln in der Enge" },
+        { ne: "Oman", t: "Oman", rolle: "Südufer — die Fahrrinnen liegen in omanischen Gewässern" },
+      ],
+      ausfuhr: [
+        { ne: "Saudi Arabia", t: "Saudi-Arabien" },
+        { ne: "Iraq", t: "Irak" },
+        { ne: "Kuwait", t: "Kuwait" },
+        { ne: "Qatar", t: "Katar" },
+        { ne: "United Arab Emirates", t: "VAE" },
+        { ne: "Bahrain", t: "Bahrain" },
+        { ne: "Iran", t: "Iran" },
+      ],
+      einfuhr: [
+        { ne: "China", t: "China" },
+        { ne: "India", t: "Indien" },
+        { ne: "Japan", t: "Japan" },
+        { ne: "South Korea", t: "Südkorea" },
+        { ne: "Taiwan", t: "Taiwan" },
+        { ne: "Singapore", t: "Singapur" },
+      ],
+    },
     routen: [
       {
-        t: "Öl aus dem Golf nach Asien und Europa",
-        f: "oel",
-        p: [[53.6, 27.3], [55.0, 26.9], [56.1, 26.6], [56.9, 26.0], [57.9, 25.2]],
+        t: "Öl und Gas hinaus · Güter und Nachschub hinein",
+        f: "oel", richtung: "beide",
+        p: [[53.24, 26.18], [55.40, 26.42], [56.60, 26.42], [57.32, 25.70], [58.28, 25.14]],
       },
     ],
   },
@@ -111,11 +137,38 @@ const ENGEN = [
       { t: "Rotes Meer", p: [42.4, 14.0], k: "wasser" },
       { t: "Golf von Aden", p: [45.0, 12.0], k: "wasser" },
     ],
+    betroffen: {
+      bbox: [-12, 0, 125, 60],
+      hinweis:
+        "Ein Durchgangsweg: Asien und der Golf auf der einen Seite, Europa auf der anderen. Getroffen wird nicht, wer hier wohnt, sondern wer die Strecke braucht.",
+      kontrolle: [
+        { ne: "Yemen", t: "Jemen", rolle: "Ostufer — von hier kamen die Angriffe" },
+        { ne: "Djibouti", t: "Dschibuti", rolle: "Westufer" },
+        { ne: "Eritrea", t: "Eritrea", rolle: "Westufer" },
+      ],
+      ausfuhr: [
+        { ne: "China", t: "China" },
+        { ne: "India", t: "Indien" },
+        { ne: "Saudi Arabia", t: "Saudi-Arabien" },
+        { ne: "United Arab Emirates", t: "VAE" },
+        { ne: "Iraq", t: "Irak" },
+        { ne: "Singapore", t: "Singapur" },
+      ],
+      einfuhr: [
+        { ne: "Netherlands", t: "Niederlande" },
+        { ne: "Germany", t: "Deutschland" },
+        { ne: "Italy", t: "Italien" },
+        { ne: "France", t: "Frankreich" },
+        { ne: "Spain", t: "Spanien" },
+        { ne: "United Kingdom", t: "Grossbritannien" },
+        { ne: "Egypt", t: "Ägypten" },
+      ],
+    },
     routen: [
       {
-        t: "Asien – Europa (über Suez)",
-        f: "handel",
-        p: [[45.3, 12.3], [44.2, 12.5], [43.5, 12.75], [42.9, 13.4], [42.4, 14.1]],
+        t: "Asien – Europa, in beide Richtungen",
+        f: "handel", richtung: "beide",
+        p: [[45.38, 12.14], [44.94, 12.26], [44.50, 12.38], [44.02, 12.38], [43.58, 12.46], [43.42, 12.62], [43.38, 12.66], [43.34, 12.90], [43.06, 13.22], [42.74, 13.54], [42.62, 13.98], [42.50, 14.22]],
       },
     ],
   },
@@ -158,10 +211,36 @@ const ENGEN = [
       { t: "Mittelmeer", p: [32.0, 31.8], k: "wasser" },
       { t: "Golf von Suez", p: [32.9, 29.4], k: "wasser" },
     ],
+    betroffen: {
+      bbox: [-12, 0, 125, 60],
+      hinweis:
+        "Dieselbe Achse wie Bab el-Mandeb, nur am nördlichen Ende. Ägypten verdient an jeder Durchfahrt — und verliert, wenn die Schiffe ausbleiben.",
+      kontrolle: [
+        { ne: "Egypt", t: "Ägypten", rolle: "allein und vollständig" },
+      ],
+      ausfuhr: [
+        { ne: "China", t: "China" },
+        { ne: "India", t: "Indien" },
+        { ne: "Singapore", t: "Singapur" },
+        { ne: "Saudi Arabia", t: "Saudi-Arabien" },
+        { ne: "United Arab Emirates", t: "VAE" },
+        { ne: "Vietnam", t: "Vietnam" },
+      ],
+      einfuhr: [
+        { ne: "Netherlands", t: "Niederlande" },
+        { ne: "Germany", t: "Deutschland" },
+        { ne: "Italy", t: "Italien" },
+        { ne: "France", t: "Frankreich" },
+        { ne: "Spain", t: "Spanien" },
+        { ne: "United Kingdom", t: "Grossbritannien" },
+        { ne: "Turkey", t: "Türkei" },
+        { ne: "Greece", t: "Griechenland" },
+      ],
+    },
     routen: [
       {
-        t: "Kanalpassage",
-        f: "handel",
+        t: "Kanalpassage · Konvois in beide Richtungen",
+        f: "handel", richtung: "beide", kanal: true,
         p: [[32.32, 31.5], [32.35, 31.0], [32.4, 30.5], [32.55, 30.0], [32.8, 29.5]],
       },
     ],
@@ -206,11 +285,37 @@ const ENGEN = [
       { t: "Andamanensee", p: [98.6, 5.6], k: "wasser" },
       { t: "Südchinesisches Meer", p: [104.6, 4.2], k: "wasser" },
     ],
+    betroffen: {
+      bbox: [35, -12, 145, 45],
+      hinweis:
+        "Der Flaschenhals zwischen Förderung und Fabrik: Golföl fliesst nach Ostasien, Fertigwaren fliessen zurück.",
+      kontrolle: [
+        { ne: "Indonesia", t: "Indonesien", rolle: "Südufer, Sumatra" },
+        { ne: "Malaysia", t: "Malaysia", rolle: "Nordufer" },
+        { ne: "Singapore", t: "Singapur", rolle: "engste Stelle, grösster Umschlaghafen" },
+      ],
+      ausfuhr: [
+        { ne: "Saudi Arabia", t: "Saudi-Arabien" },
+        { ne: "United Arab Emirates", t: "VAE" },
+        { ne: "Qatar", t: "Katar" },
+        { ne: "Kuwait", t: "Kuwait" },
+        { ne: "Iraq", t: "Irak" },
+        { ne: "India", t: "Indien" },
+      ],
+      einfuhr: [
+        { ne: "China", t: "China" },
+        { ne: "Japan", t: "Japan" },
+        { ne: "South Korea", t: "Südkorea" },
+        { ne: "Taiwan", t: "Taiwan" },
+        { ne: "Vietnam", t: "Vietnam" },
+        { ne: "Philippines", t: "Philippinen" },
+      ],
+    },
     routen: [
       {
-        t: "Golföl nach Ostasien",
-        f: "oel",
-        p: [[98.6, 5.2], [100.0, 3.6], [101.6, 2.2], [103.2, 1.2], [104.6, 1.9]],
+        t: "Öl nach Ostasien · Fertigwaren nach Westen",
+        f: "oel", richtung: "beide",
+        p: [[98.64, 5.30], [99.48, 4.58], [100.32, 3.74], [101.16, 2.90], [102.06, 2.24], [103.02, 1.64], [103.44, 1.28], [103.98, 1.22], [104.34, 1.40], [104.76, 1.82], [105.18, 2.24]],
       },
     ],
   },
@@ -257,10 +362,33 @@ const ENGEN = [
       { t: "Xiamen", p: [118.1, 24.48], k: "stadt" },
       { t: "Ostchinesisches Meer", p: [122.3, 26.4], k: "wasser" },
     ],
+    betroffen: {
+      bbox: [95, -5, 150, 50],
+      hinweis:
+        "Hier ist nicht die Ladung das Besondere, sondern der Ort: Was hinter der Enge steht — Halbleiter — hat kein Ersatzteil.",
+      kontrolle: [
+        { ne: "China", t: "China", rolle: "Westufer, beansprucht die ganze Strasse" },
+        { ne: "Taiwan", t: "Taiwan", rolle: "Ostufer" },
+      ],
+      ausfuhr: [
+        { ne: "China", t: "China" },
+        { ne: "Taiwan", t: "Taiwan" },
+        { ne: "South Korea", t: "Südkorea" },
+        { ne: "Japan", t: "Japan" },
+        { ne: "Vietnam", t: "Vietnam" },
+      ],
+      einfuhr: [
+        { ne: "United States of America", t: "USA" },
+        { ne: "Germany", t: "Deutschland" },
+        { ne: "Netherlands", t: "Niederlande" },
+        { ne: "Singapore", t: "Singapur" },
+        { ne: "India", t: "Indien" },
+      ],
+    },
     routen: [
       {
-        t: "Containerverkehr nach Nordostasien",
-        f: "handel",
+        t: "Containerverkehr nach Nordostasien und zurück",
+        f: "handel", richtung: "beide",
         p: [[117.6, 22.0], [118.6, 23.3], [119.7, 24.6], [121.0, 26.0], [122.0, 26.7]],
       },
     ],
@@ -309,11 +437,34 @@ const ENGEN = [
       { t: "Marmarameer", p: [28.1, 40.65], k: "wasser" },
       { t: "Ägäis", p: [25.9, 39.7], k: "wasser" },
     ],
+    betroffen: {
+      bbox: [-12, 25, 70, 62],
+      hinweis:
+        "Das Schwarze Meer ist eine Kammer mit einer Tür, und die Türkei hält den Schlüssel. Wer hier Getreide kauft, merkt es zuerst am Brotpreis.",
+      kontrolle: [
+        { ne: "Turkey", t: "Türkei", rolle: "beide Ufer — und der Vertrag von Montreux" },
+      ],
+      ausfuhr: [
+        { ne: "Russia", t: "Russland" },
+        { ne: "Ukraine", t: "Ukraine" },
+        { ne: "Romania", t: "Rumänien" },
+        { ne: "Bulgaria", t: "Bulgarien" },
+        { ne: "Georgia", t: "Georgien" },
+      ],
+      einfuhr: [
+        { ne: "Egypt", t: "Ägypten" },
+        { ne: "Turkey", t: "Türkei" },
+        { ne: "Italy", t: "Italien" },
+        { ne: "Spain", t: "Spanien" },
+        { ne: "China", t: "China" },
+        { ne: "India", t: "Indien" },
+      ],
+    },
     routen: [
       {
-        t: "Getreide und Öl aus dem Schwarzen Meer",
-        f: "handel",
-        p: [[30.2, 42.2], [29.3, 41.5], [29.0, 41.05], [28.0, 40.7], [26.3, 40.1], [25.8, 39.7]],
+        t: "Getreide und Öl hinaus · Güter hinein",
+        f: "handel", richtung: "beide", kanal: true,
+        p: [[30.2, 42.2], [29.3, 41.5], [29.02, 41.05], [28.4, 40.8], [26.7, 40.4], [26.2, 40.0], [25.8, 39.6]],
       },
     ],
   },
@@ -358,10 +509,31 @@ const ENGEN = [
       { t: "Karibik", p: [-79.9, 9.75], k: "wasser" },
       { t: "Pazifik", p: [-79.3, 8.5], k: "wasser" },
     ],
+    betroffen: {
+      bbox: [-135, -40, 145, 55],
+      hinweis:
+        "Verbindet zwei Ozeane und damit die US-Ostküste mit Asien. Der Engpass ist hier nicht Politik, sondern Regen.",
+      kontrolle: [
+        { ne: "Panama", t: "Panama", rolle: "seit 1999 allein" },
+      ],
+      ausfuhr: [
+        { ne: "United States of America", t: "USA" },
+        { ne: "Chile", t: "Chile" },
+        { ne: "Peru", t: "Peru" },
+        { ne: "Ecuador", t: "Ecuador" },
+        { ne: "Colombia", t: "Kolumbien" },
+        { ne: "Mexico", t: "Mexiko" },
+      ],
+      einfuhr: [
+        { ne: "China", t: "China" },
+        { ne: "Japan", t: "Japan" },
+        { ne: "South Korea", t: "Südkorea" },
+      ],
+    },
     routen: [
       {
-        t: "Kanalpassage",
-        f: "handel",
+        t: "Kanalpassage · Schleusen in beide Richtungen",
+        f: "handel", richtung: "beide", kanal: true,
         p: [[-79.92, 9.6], [-79.88, 9.35], [-79.75, 9.15], [-79.6, 9.0], [-79.45, 8.75]],
       },
     ],
@@ -403,10 +575,36 @@ const ENGEN = [
       { t: "Atlantik", p: [-6.3, 35.85], k: "wasser" },
       { t: "Mittelmeer", p: [-4.8, 36.0], k: "wasser" },
     ],
+    betroffen: {
+      bbox: [-30, 20, 45, 60],
+      hinweis:
+        "Ohne diese 14 Kilometer wäre das Mittelmeer ein Binnensee. Jeder Anrainer hängt daran, nicht nur die beiden Ufer.",
+      kontrolle: [
+        { ne: "Spain", t: "Spanien", rolle: "Nordufer" },
+        { ne: "Morocco", t: "Marokko", rolle: "Südufer" },
+        { ne: "United Kingdom", t: "Gibraltar (GB)", rolle: "der Felsen selbst" },
+      ],
+      ausfuhr: [
+        { ne: "Italy", t: "Italien" },
+        { ne: "Spain", t: "Spanien" },
+        { ne: "France", t: "Frankreich" },
+        { ne: "Greece", t: "Griechenland" },
+        { ne: "Turkey", t: "Türkei" },
+        { ne: "Egypt", t: "Ägypten" },
+        { ne: "Algeria", t: "Algerien" },
+        { ne: "Libya", t: "Libyen" },
+      ],
+      einfuhr: [
+        { ne: "United States of America", t: "USA" },
+        { ne: "United Kingdom", t: "Grossbritannien" },
+        { ne: "Netherlands", t: "Niederlande" },
+        { ne: "Germany", t: "Deutschland" },
+      ],
+    },
     routen: [
       {
-        t: "Atlantik – Mittelmeer",
-        f: "handel",
+        t: "Atlantik – Mittelmeer, in beide Richtungen",
+        f: "handel", richtung: "beide",
         p: [[-6.35, 35.92], [-5.9, 35.94], [-5.5, 36.0], [-4.8, 36.05]],
       },
     ],
@@ -452,11 +650,42 @@ const ENGEN = [
       { t: "Kattegat", p: [11.6, 57.0], k: "wasser" },
       { t: "Ostsee", p: [12.8, 54.8], k: "wasser" },
     ],
+    betroffen: {
+      bbox: [-15, 35, 105, 72],
+      hinweis:
+        "Die Ostsee ist wie das Schwarze Meer eine Kammer mit einer Tür — nur liegt die Tür hier zwischen zwei NATO-Staaten.",
+      kontrolle: [
+        { ne: "Denmark", t: "Dänemark", rolle: "beide Belte und der halbe Öresund" },
+        { ne: "Sweden", t: "Schweden", rolle: "Ostseite des Öresunds" },
+      ],
+      ausfuhr: [
+        { ne: "Russia", t: "Russland" },
+        { ne: "Finland", t: "Finnland" },
+        { ne: "Estonia", t: "Estland" },
+        { ne: "Latvia", t: "Lettland" },
+        { ne: "Lithuania", t: "Litauen" },
+        { ne: "Poland", t: "Polen" },
+        { ne: "Sweden", t: "Schweden" },
+        { ne: "Germany", t: "Deutschland" },
+      ],
+      einfuhr: [
+        { ne: "India", t: "Indien" },
+        { ne: "China", t: "China" },
+        { ne: "Turkey", t: "Türkei" },
+        { ne: "Netherlands", t: "Niederlande" },
+        { ne: "United Kingdom", t: "Grossbritannien" },
+      ],
+    },
     routen: [
       {
-        t: "Russisches Öl aus der Ostsee",
-        f: "oel",
-        p: [[13.6, 55.0], [12.8, 55.5], [11.9, 56.3], [11.2, 57.2], [10.4, 57.6]],
+        t: "Öl hinaus · Güter in die Ostsee hinein",
+        f: "oel", richtung: "beide",
+        p: [[13.24, 54.94], [12.89, 54.89], [12.69, 54.69], [12.39, 54.59], [12.04, 54.58], [11.89, 54.52],
+            [11.69, 54.49], [11.39, 54.49], [11.09, 54.64], [10.94, 54.80], [10.92, 55.04],
+            [11.02, 55.20], [10.98, 55.36], [10.92, 55.50], [10.86, 55.64], [10.84, 55.76],
+            [10.90, 55.90], [10.98, 56.10], [11.00, 56.40], [11.04, 56.74], [10.96, 57.06],
+            [10.82, 57.28], [10.79, 57.56], [10.66, 57.80], [10.24, 57.84], [9.74, 57.84],
+            [9.24, 57.89]],
       },
     ],
   },

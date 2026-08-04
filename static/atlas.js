@@ -9,12 +9,22 @@ let view = null;           // aktuelle Projektion
 let ziel = null;           // Ziel-Ausschnitt der laufenden Animation
 let anim = null;
 let modus = "welt";        // welt | detail | quiz
+let ansicht = "enge";      // innerhalb von detail: enge | betroffen
 let aktiv = null;          // angezeigte Meerenge
 let hover = null;
 let t0 = performance.now();
 
 /* Quiz-Zustand */
 let quiz = { frage: null, rest: [], antwort: null, punkte: 0, runden: 0 };
+
+/* Rollen der betroffenen Länder. Die drei Farben sind gegen den dunklen
+   Untergrund und gegen Farbfehlsichtigkeit geprüft; zusätzlich trägt jedes
+   Land seinen Namen, Farbe allein muss also nie ausreichen. */
+const ROLLEN = {
+  kontrolle: { c: "#199e70", fill: "#1b6b52", t: "Kontrolliert die Enge" },
+  ausfuhr: { c: "#d95926", fill: "#8a3c1e", t: "Verschifft hier hinaus" },
+  einfuhr: { c: "#3987e5", fill: "#2a5a94", t: "Empfängt über diese Route" },
+};
 
 const F = {
   see: "#0e1520",
@@ -80,6 +90,9 @@ function init() {
     b.onclick = () => setModus(b.dataset.modus);
   });
   document.getElementById("zurueck").onclick = () => setModus("welt");
+  document.querySelectorAll("#ansichten button").forEach((b) => {
+    b.onclick = () => setAnsicht(b.dataset.ansicht);
+  });
   document.getElementById("weiter").onclick = naechsteFrage;
   document.getElementById("stand").textContent = STAND;
 
@@ -100,6 +113,66 @@ function resize() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const b = (ziel && ziel.bbox) || (view && view.bbox) || WELT_BBOX;
   view = makeView(b, W, H);
+}
+
+/* Zuordnung Land -> Rolle für die aktuelle Ansicht. Ein Land kann mehrere
+   Rollen haben (Iran kontrolliert Hormuz und exportiert dadurch); dann
+   gewinnt die Kontrolle, weil das die politisch entscheidende ist. */
+function rollenKarte() {
+  if (modus !== "detail" || ansicht !== "betroffen" || !aktiv) return {};
+  const b = aktiv.betroffen;
+  const m = {};
+  for (const l of b.einfuhr) m[l.ne] = "einfuhr";
+  for (const l of b.ausfuhr) m[l.ne] = "ausfuhr";
+  for (const l of b.kontrolle) m[l.ne] = "kontrolle";
+  return m;
+}
+
+/* Beschriftet die eingefärbten Länder. Als Ankerpunkt dient die Mitte des
+   grössten Rings — bei Ländern mit vielen Inseln ist das der Hauptteil. */
+function zeichneRollenNamen(e) {
+  const rollen = rollenKarte();
+  const namen = {};
+  for (const gruppe of ["kontrolle", "ausfuhr", "einfuhr"]) {
+    for (const l of e.betroffen[gruppe]) if (rollen[l.ne] === gruppe) namen[l.ne] = l.t;
+  }
+  const gesetzt = [];
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "600 11px ui-sans-serif,system-ui,sans-serif";
+  for (const l of LAENDER) {
+    const rolle = rollen[l.n];
+    if (!rolle || !namen[l.n]) continue;
+    let best = null;
+    for (const p of l.polys) {
+      const [w, s, en, n] = p.bbox;
+      const flaeche = (en - w) * (n - s);
+      if (!best || flaeche > best.f) best = { f: flaeche, x: (w + en) / 2, y: (s + n) / 2 };
+    }
+    if (!best) continue;
+    const [x, y] = view.project(best.x, best.y);
+    if (x < 4 || x > W - 4 || y < 4 || y > H - 4) continue;
+    const b = ctx.measureText(namen[l.n]).width / 2 + 3;
+    const kasten = [x - b, y - 8, x + b, y + 8];
+    // Überlappende Namen weglassen statt übereinanderdrucken.
+    if (gesetzt.some((m) => !(kasten[2] < m[0] || kasten[0] > m[2] ||
+                              kasten[3] < m[1] || kasten[1] > m[3]))) continue;
+    gesetzt.push(kasten);
+    ctx.fillStyle = "#f2f4f7";
+    halo(namen[l.n], x, y);
+  }
+  // Die Enge selbst bleibt der Bezugspunkt.
+  const [mx, my] = view.project(e.pos[0], e.pos[1]);
+  ctx.beginPath();
+  ctx.arc(mx, my, 6, 0, 7);
+  ctx.fillStyle = F.marke;
+  ctx.fill();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = F.see;
+  ctx.stroke();
+  ctx.font = "600 13px ui-sans-serif,system-ui,sans-serif";
+  ctx.fillStyle = F.ink;
+  halo(e.kurz, mx, my - 16);
 }
 
 /* ---------- Ansichten ---------- */
@@ -131,6 +204,7 @@ function setModus(m) {
 
 function zeigeEnge(e) {
   aktiv = e;
+  ansicht = "enge";
   modus = "detail";
   document.body.dataset.modus = "detail";
   requestAnimationFrame(resize);
@@ -139,6 +213,22 @@ function zeigeEnge(e) {
   );
   fliegeZu(e.zoom);
   bauPanel(e);
+  bauLegende(e);
+  document.body.dataset.ansicht = "enge";
+  document.querySelectorAll("#ansichten button").forEach((b) =>
+    b.classList.toggle("an", b.dataset.ansicht === "enge"));
+  document.getElementById("legende").hidden = true;
+}
+
+/* Zwischen Nahaufnahme und Betroffenen-Ansicht wechseln. */
+function setAnsicht(a) {
+  if (!aktiv) return;
+  ansicht = a;
+  document.body.dataset.ansicht = a;
+  document.querySelectorAll("#ansichten button").forEach((b) =>
+    b.classList.toggle("an", b.dataset.ansicht === a));
+  fliegeZu(a === "betroffen" ? aktiv.betroffen.bbox : aktiv.zoom);
+  document.getElementById("legende").hidden = a !== "betroffen";
 }
 
 /* Weicher Flug von einem Ausschnitt zum naechsten. Der Sprung waere
@@ -173,7 +263,45 @@ function tick(now) {
 
 /* ---------- Zeichnen ---------- */
 
+/* Die Grundkarte ist teuer (rund 4000 Ringe) und ändert sich nur, wenn sich
+   der Ausschnitt bewegt. Marker und Pfeile ändern sich dagegen in jedem Bild.
+   Also: Land einmal auf eine zweite Leinwand zeichnen und die nur noch
+   kopieren. Ohne das lief der Atlas mit 13 Bildern pro Sekunde. */
+let basis = null, basisSchluessel = "";
+
+function grundkarte() {
+  const rollen = rollenKarte();
+  const schluessel = [W, H, DPR, view.bbox.join(","), aktiv ? aktiv.id : "",
+                      ansicht, Object.keys(rollen).length].join("|");
+  if (basis && basisSchluessel === schluessel) return basis;
+  if (!basis) basis = document.createElement("canvas");
+  basis.width = W * DPR;
+  basis.height = H * DPR;
+  const c = basis.getContext("2d");
+  c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  zeichneLand(c, rollen);
+  basisSchluessel = schluessel;
+  return basis;
+}
+
 function zeichne(now) {
+  ctx.drawImage(grundkarte(), 0, 0, W, H);
+
+  if (modus === "detail" && aktiv) {
+    if (ansicht === "betroffen") {
+      zeichneRollenNamen(aktiv);
+    } else {
+      zeichneRouten(aktiv, now);
+      zeichneOrte(aktiv);
+      zeichneEngenName(aktiv);
+    }
+  } else {
+    zeichneMeere(markenKaesten());
+    zeichneMarken(now);
+  }
+}
+
+function zeichneLand(ctx, rollen) {
   ctx.fillStyle = F.see;
   ctx.fillRect(0, 0, W, H);
 
@@ -211,28 +339,17 @@ function zeichne(now) {
       }
     }
     if (!ist) continue;
-    ctx.fillStyle = aktiv ? F.landAktiv : F.land;
+    const rolle = rollen[l.n];
+    ctx.fillStyle = rolle ? ROLLEN[rolle].fill : aktiv ? F.landAktiv : F.land;
     // Nonzero, nicht evenodd: ein Land besteht aus mehreren getrennten
     // Landmassen plus echten Loechern (Enklaven, Seen). Bei evenodd loeschen
     // sich zwei uebereinanderliegende Flaechen gegenseitig aus — dann kippen
     // Land und Wasser um. Die Umlaufrichtung der Ringe traegt die Information,
     // welcher Ring ein Loch ist.
     ctx.fill("nonzero");
-    ctx.strokeStyle = F.kueste;
-    ctx.lineWidth = detail ? 1 : 0.6;
+    ctx.strokeStyle = rolle ? ROLLEN[rolle].c : F.kueste;
+    ctx.lineWidth = rolle ? 1.4 : detail ? 1 : 0.6;
     ctx.stroke();
-  }
-
-  if (modus === "detail" && aktiv) {
-    zeichneRouten(aktiv, now);
-    zeichneOrte(aktiv);
-    zeichneEngenName(aktiv);
-  } else {
-    // Erst die Marker vermessen, dann die Meeresnamen zeichnen: ein
-    // Meeresname, der unter einem Marker liegt, wird weggelassen statt
-    // uebereinandergedruckt.
-    zeichneMeere(markenKaesten());
-    zeichneMarken(now);
   }
 }
 
@@ -393,36 +510,62 @@ function zeichneRouten(e, now) {
     const farbe = ROUTEN_FARBEN[r.f].c;
     const pts = r.p.map((p) => view.project(p[0], p[1]));
 
+    // Catmull-Rom als Bezier: die Kurve laeuft durch jeden Wegpunkt.
+    // Die frueher genutzte Variante mit Mittelpunkten schnitt Kurven ab und
+    // lief dadurch ueber Land, obwohl die Wegpunkte selbst im Wasser lagen.
+    const bahn = () => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i - 1] || pts[i], p1 = pts[i];
+        const p2 = pts[i + 1], p3 = pts[i + 2] || pts[i + 1];
+        ctx.bezierCurveTo(
+          p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
+          p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
+          p2[0], p2[1]);
+      }
+    };
+
+    // Kanaele und sehr schmale Engen sind in den Kartendaten kein Wasser:
+    // Suez und Panama sind durch Land gegraben, der Bosporus ist mit 700 m
+    // schmaler als die Aufloesung. Damit die Linie nicht wie ein Fehler
+    // aussieht, wird der Fahrweg als Wasserband unter die Route gelegt.
+    if (r.kanal) {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = F.see;
+      ctx.lineWidth = 9;
+      bahn();
+      ctx.stroke();
+    }
+
     ctx.strokeStyle = farbe;
     ctx.lineWidth = 3;
     ctx.lineCap = "round";
     ctx.setLineDash([14, 10]);
     ctx.lineDashOffset = -(now / 45) % 24;
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) {
-      const p = pts[i - 1], q = pts[i];
-      ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
-    }
-    const last = pts[pts.length - 1];
-    ctx.lineTo(last[0], last[1]);
+    bahn();
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Pfeilspitze am Ende
-    const vor = pts[pts.length - 2];
-    const a = Math.atan2(last[1] - vor[1], last[0] - vor[0]);
-    ctx.save();
-    ctx.translate(last[0], last[1]);
-    ctx.rotate(a);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-13, -7);
-    ctx.lineTo(-13, 7);
-    ctx.closePath();
-    ctx.fillStyle = farbe;
-    ctx.fill();
-    ctx.restore();
+    // Pfeilspitzen. Fast jede dieser Routen wird in beide Richtungen
+    // befahren — ein einzelner Pfeil hat das falsch dargestellt.
+    const spitze = (an, von) => {
+      const a = Math.atan2(an[1] - von[1], an[0] - von[0]);
+      ctx.save();
+      ctx.translate(an[0], an[1]);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-13, -7);
+      ctx.lineTo(-13, 7);
+      ctx.closePath();
+      ctx.fillStyle = farbe;
+      ctx.fill();
+      ctx.restore();
+    };
+    spitze(pts[pts.length - 1], pts[pts.length - 2]);
+    if (r.richtung !== "vor") spitze(pts[0], pts[1]);
 
     // Direkte Beschriftung statt Legende — eine Route, ein Name. Nicht in
     // die Mitte: dort steht der Name der Meerenge.
@@ -431,7 +574,7 @@ function zeichneRouten(e, now) {
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
     ctx.fillStyle = farbe;
-    halo(r.t, m[0], m[1] - 10);
+    halo(r.t, m[0], m[1] - 12);
   }
 }
 
@@ -475,6 +618,18 @@ function onClick(ev) {
 
 /* ---------- Panel und Liste ---------- */
 
+function bauLegende(e) {
+  const zaehl = { kontrolle: e.betroffen.kontrolle.length,
+                  ausfuhr: e.betroffen.ausfuhr.length,
+                  einfuhr: e.betroffen.einfuhr.length };
+  document.getElementById("legende").innerHTML =
+    Object.keys(ROLLEN).map((k) =>
+      '<div class="z"><i style="background:' + ROLLEN[k].fill +
+      ';border-color:' + ROLLEN[k].c + '"></i>' + ROLLEN[k].t +
+      ' <span style="color:var(--dim)">· ' + zaehl[k] + ' Länder</span></div>').join("") +
+    '<div class="hw">' + e.betroffen.hinweis + '</div>';
+}
+
 function bauPanel(e) {
   const rf = (r) => ROUTEN_FARBEN[r.f];
   const zeile = (k, v) =>
@@ -486,7 +641,10 @@ function bauPanel(e) {
       zeile("Breite", e.breite) +
       zeile("Verkehr", e.menge) +
       zeile("Anrainer", e.anrainer) +
+      zeile("Kontrolle", e.betroffen.kontrolle
+        .map((k) => "<b>" + k.t + "</b> — " + k.rolle).join("<br>")) +
     "</div>" +
+    '<button class="bt" onclick="setAnsicht(\'betroffen\')">Betroffene Länder auf der Karte zeigen</button>' +
     "<h3>Warum sie zählt</h3><p>" + e.warum + "</p>" +
     "<h3>Was man wissen sollte</h3><p>" + e.detail + "</p>" +
     '<h3>Lage <span class="tag">veraltet schnell</span></h3><p>' + e.lage + "</p>" +

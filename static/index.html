@@ -37,6 +37,23 @@ canvas{display:block}
   backdrop-filter:blur(6px);border:1px solid var(--rand);color:var(--ink);
   padding:7px 13px;border-radius:6px;cursor:pointer;font:inherit;font-size:13px}
 #zurueck:hover{background:#1c2635}
+#ansichten{position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  display:flex;gap:2px;background:#131b26cc;backdrop-filter:blur(6px);
+  border:1px solid var(--rand);border-radius:8px;padding:3px}
+#ansichten button{background:none;border:0;color:var(--ink2);padding:6px 14px;
+  border-radius:6px;cursor:pointer;font:inherit;font-size:13px;white-space:nowrap}
+#ansichten button:hover{color:var(--ink)}
+#ansichten button.an{background:#26344a;color:var(--ink)}
+body:not([data-modus="detail"]) #ansichten{display:none}
+#legende{position:absolute;bottom:14px;left:14px;background:#0b0f16dd;
+  backdrop-filter:blur(6px);border:1px solid var(--rand);border-radius:8px;
+  padding:10px 14px;font-size:12px;color:var(--ink2);max-width:340px}
+#legende .z{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+#legende .z:last-of-type{margin-bottom:0}
+#legende i{width:13px;height:13px;border-radius:3px;flex:none;
+  border:1.5px solid}
+#legende .hw{margin-top:9px;padding-top:9px;border-top:1px solid var(--rand);
+  color:var(--dim);line-height:1.45}
 #hinweis{position:absolute;bottom:14px;left:14px;color:var(--dim);font-size:11px;
   background:#0b0f16aa;padding:5px 9px;border-radius:5px;pointer-events:none}
 
@@ -62,6 +79,11 @@ canvas{display:block}
   color:var(--ink2);font-size:12px}
 .legende i{display:inline-block;width:12px;height:3px;border-radius:2px;
   margin-right:6px;vertical-align:middle}
+.bt{width:100%;margin-top:14px;background:#1b2637;border:1px solid var(--rand);
+  color:var(--ink);padding:9px 12px;border-radius:7px;cursor:pointer;font:inherit;
+  font-size:13px}
+.bt:hover{background:#24324a;border-color:#3a4c68}
+body[data-ansicht="betroffen"] .bt{display:none}
 ul.q{margin:0;padding-left:17px;color:var(--dim);font-size:12px}
 ul.q li{margin-bottom:5px}
 
@@ -126,6 +148,11 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
   <div id="kartenfeld">
     <canvas id="karte"></canvas>
     <button id="zurueck">← Weltkarte</button>
+    <div id="ansichten">
+      <button data-ansicht="enge" class="an">Die Enge</button>
+      <button data-ansicht="betroffen">Wer hängt daran</button>
+    </div>
+    <div id="legende" hidden></div>
     <div id="hinweis">Klick auf einen Punkt, um die Meerenge zu öffnen.</div>
   </div>
   <div id="liste"></div>

@@ -42,6 +42,8 @@ Standardbibliothek. Copy-Paste-Befehle stehen in `DEPLOY.md`.
 | `static/atlas.js` | Zeichnen auf Canvas, Zoomflug, Klicks, Quiz |
 | `static/world.js` | Erzeugte Kartengeometrie (nicht von Hand ändern) |
 | `tools/build_map.py` | Erzeugt `world.js` aus den Natural-Earth-Daten |
+| `tools/seeweg.js` | Sucht Seewege automatisch durchs Wasser (Autorenwerkzeug) |
+| `tools/pruefe_routen.js` | Prüft, ob jede gezeichnete Route im Wasser liegt |
 | `data/` | Quelldaten (Natural Earth 1:50 m, Public Domain) |
 | `serve.py` | Auslieferung mit optionalem Passwortschutz |
 | `deploy/atlas.service` | systemd-Unit |
@@ -72,6 +74,28 @@ Alles Inhaltliche steht in `static/data.js`. Ein Eintrag braucht:
 Wegpunkte einer Route sollten **innerhalb des Zoomausschnitts enden**, sonst
 läuft die Pfeilspitze aus dem Bild.
 
+Dazu gehört ein `betroffen`-Block mit den Ländern, die an der Enge hängen —
+`kontrolle`, `ausfuhr`, `einfuhr`, jeweils mit `ne` (Name in den Kartendaten)
+und `t` (deutsche Beschriftung).
+
+**Wegpunkte nie von Hand raten.** Das ging viermal schief: Routen liefen durch
+Iran, über Malaysia und quer durch Lolland. Stattdessen:
+
+```bash
+node tools/seeweg.js 53.2 26.2 58.3 25.1     # Start- und Zielpunkt im Wasser
+node tools/pruefe_routen.js                  # danach immer prüfen
+```
+
+`seeweg.js` legt ein Raster über die Landmasken, sucht den kürzesten Wasserweg
+und gibt fertige Wegpunkte aus. `pruefe_routen.js` tastet **genau die Kurve
+ab, die gezeichnet wird** — die weicht von der Punktfolge ab, und in dieser
+Lücke steckten die letzten Fehler.
+
+Ausgenommen sind Routen mit `kanal: true`: Suez und Panama sind durch Land
+gegraben, der Bosporus ist mit 700 m schmaler als die Kartenauflösung. Sie
+bekommen beim Zeichnen ein Wasserband untergelegt, damit die Linie nicht wie
+ein Fehler aussieht.
+
 ## Karte neu bauen
 
 Nur nötig, wenn du Auflösung oder Quelle änderst:
@@ -80,10 +104,14 @@ Nur nötig, wenn du Auflösung oder Quelle änderst:
 python3 tools/build_map.py    # data/…topo.json  ->  static/world.js
 ```
 
-Das Skript dekodiert TopoJSON, rundet auf ein Raster von 0,02° (rund 2 km) und
-kodiert die Ringe als Differenzen in Textform — dadurch 218 KB statt 1,4 MB.
-Für Ansichten enger als etwa ein Grad wird die Küstenlinie sichtbar eckig; wer
-das braucht, nimmt die 1:10-m-Daten und passt `GRID` an.
+Das Skript dekodiert TopoJSON, rundet auf ein Raster von 0,015° (rund 1,5 km)
+und kodiert die Ringe als Differenzen in Textform — sonst wäre die Datei
+fünfmal so gross. Winzige Inseln und entartete Splitter (Streifen von einer
+Rasterzeile Höhe, die das Runden erzeugt) fallen weg.
+
+**Grenze der Daten:** Natural Earth schneidet sehr schmale Kanäle in den
+Länderpolygonen nicht aus. Der Bosporus ist dort massives Land, egal welche
+Auflösung — deshalb die `kanal`-Kennzeichnung statt feinerer Daten.
 
 ## Zu den Inhalten
 

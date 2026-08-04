@@ -33,6 +33,16 @@ Siehe `README.md` für Aufbau und Bedienung.
 - **Leinwand nach jedem Moduswechsel neu messen.** Panel und Quizleiste ändern
   die Grösse des Kartenfelds; ohne `resize()` behält der Canvas seine alte Höhe
   und überdeckt, was darunter eingeblendet wird.
+- **Seewege nie von Hand raten.** `tools/seeweg.js` berechnet sie,
+  `tools/pruefe_routen.js` prüft sie. Geprüft wird die gezeichnete Kurve, nicht
+  die Punktfolge — die beiden weichen voneinander ab, und genau dort steckten
+  die Fehler.
+- **Die Kurve muss durch ihre Wegpunkte laufen.** Mit der früheren Variante
+  über Mittelpunkte schnitt sie Kurven ab und lief über Land, obwohl jeder
+  Wegpunkt im Wasser lag. Jetzt Catmull-Rom.
+- **Nicht die Grundkarte in jedem Bild neu zeichnen.** 3600 Ringe pro Bild
+  ergaben 13 Bilder pro Sekunde. Die Grundkarte liegt auf einer zweiten
+  Leinwand und wird nur bei Ausschnittswechsel neu gebaut.
 - **Nach jeder Änderung wirklich hinschauen.** `node --check` findet nur
   Syntaxfehler. Karten sind visuell — Screenshot machen und ansehen.
 
