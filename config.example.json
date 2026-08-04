@@ -3,7 +3,6 @@
   "port": 80,
   "auth_token": "",
 
-  "_x": "Beitraege lesen erfordert bei X einen kostenpflichtigen API-Zugang.",
-  "x_bearer": "",
-  "x_konten": []
+  "_tg": "Bot bei @BotFather anlegen. Kostenlos. Der Bot sieht nur Kanaele und Gruppen, in denen er Mitglied ist.",
+  "tg_token": ""
 }

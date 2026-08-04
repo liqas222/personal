@@ -158,27 +158,35 @@ Zusätzlich wird die **zweite Reihe** eingefärbt: Länder, die nicht selbst an
 der Enge hängen, aber an einem Land, das dort hängt. Die Liste wird aus den
 Handelspartnern der ersten Reihe abgeleitet, nicht von Hand gepflegt.
 
-## X-Konten verfolgen
+## Telegram-Kanäle verfolgen
 
-`serve.py` kann Beiträge verfolgter X-Konten abrufen und sie den Meerengen
-zuordnen. Sie erscheinen im Detailpanel der jeweiligen Enge.
+`serve.py` liest Telegram-Nachrichten und ordnet sie den Meerengen zu. Sie
+erscheinen im Detailpanel der jeweiligen Enge. Die Bot-API ist **kostenlos**.
 
-```json
-"x_bearer": "AAAA…",
-"x_konten": ["konto1", "konto2"]
-```
+1. Bei `@BotFather` einen Bot anlegen, Token kopieren.
+2. In `config.json`: `"tg_token": "123456:ABC…"`
+3. Den Bot in eine eigene Gruppe oder einen eigenen Kanal aufnehmen.
 
-**Das Lesen von Beiträgen erfordert bei X einen kostenpflichtigen
-API-Zugang.** Ohne Token bleibt die Ebene sichtbar leer („MELDUNGEN: NICHT
-EINGERICHTET"), der Atlas funktioniert vollständig weiter.
+**Der Bot sieht nur, wo er selbst Mitglied ist.** Einen fremden Kanal, den du
+nur liest, kann er nicht mitlesen — dort leitest du die interessanten
+Nachrichten in deine eigene Gruppe weiter, in der der Bot sitzt. Ohne Token
+bleibt die Ebene sichtbar leer, der Atlas läuft vollständig weiter.
 
 Die Auswertung ist bewusst eine **Stichwortzuordnung**, keine Bewertung:
-ein Beitrag, der „Strait of Hormuz" enthält, landet bei Hormuz. Keine
+eine Nachricht, die „Strait of Hormuz" enthält, landet bei Hormuz. Keine
 Stimmungsanalyse und keine Prüfung des Wahrheitsgehalts — das kann eine
 Stichwortsuche nicht, und so zu tun wäre irreführend. Deshalb steht an den
 Meldungen „ungeprüft".
 
-## Live-Daten
+## Live-Daten und Status
+
+Der Chokepoint-Status ist **nicht mehr nur handgesetzt**: aus den täglichen
+Durchfahrten wird die Abweichung vom 60-Tage-Median berechnet. Ein Einbruch
+ab 15 % stuft auf Amber, ab 35 % auf Rot. Genommen wird der **schlechtere**
+Wert aus Zahl und Handbewertung — die Zahlen sehen den Verkehrseinbruch, die
+Bewertung kennt den militärischen Zusammenhang. Im Panel steht, welcher
+gewonnen hat.
+
 
 `serve.py` holt alle sechs Stunden die täglichen Durchfahrten je Meerenge von
 **IMF PortWatch** (offen zugänglich) und legt sie unter `/api/live` ab. Die

@@ -53,6 +53,13 @@ Siehe `README.md` für Aufbau und Bedienung.
   in Ordnung; alles Feinkörnigere gehört nicht hinein.
 - **Statuseinstufungen sind Bewertung, keine Meldung** — und müssen im UI als
   solche kenntlich bleiben, samt Datum.
+- **Der Status folgt den Zahlen, wo es Zahlen gibt.** `statusVon()` leitet aus
+  der Abweichung der Durchfahrten vom 60-Tage-Median einen eigenen Status ab
+  und nimmt den **schlechteren** von Zahl und Handbewertung; im Panel steht,
+  welcher gewonnen hat. Ein handgesetzter Status allein veraltet unbemerkt —
+  genau das war bei Hormuz der Fall.
+- **Zwischengespeicherte Live-Werte nie wegwerfen, wenn ein Abruf scheitert.**
+  Stattdessen "ABRUF GESTÖRT" dazuschreiben.
 - **Der Übungsvermerk neben dem Klassifizierungsbanner bleibt stehen.** Die
   Aufmachung imitiert ein Verschlusssachen-Produkt; ohne den Vermerk wäre die
   Seite ausserhalb des eigenen Bildschirms missverständlich.
