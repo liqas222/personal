@@ -25,6 +25,9 @@ ol{color:var(--ink2);font-size:12px;padding-left:20px;margin:0 0 14px}
 li{margin-bottom:5px}
 label{display:block;color:var(--dim);font-size:10px;letter-spacing:1.5px;
   margin-bottom:5px;text-transform:uppercase}
+textarea{width:100%;background:#060a0e;border:1px solid var(--rand);
+  color:var(--ink);padding:9px 11px;font:inherit;resize:vertical}
+textarea:focus{outline:none;border-color:var(--phos)}
 input[type=text],input[type=password]{width:100%;background:#060a0e;
   border:1px solid var(--rand);color:var(--ink);padding:9px 11px;font:inherit}
 input:focus{outline:none;border-color:var(--phos)}
@@ -62,7 +65,22 @@ a{color:var(--phos)}
   </div>
 
   <section>
-    <h2>1 · Telegram-Bot für neue Nachrichten</h2>
+    <h2>1 · Öffentliche Kanäle mitlesen <span style="color:var(--dim)">— empfohlen</span></h2>
+    <p>Für Kanäle, in denen du nur <b>Mitglied</b> bist. Öffentliche Kanäle
+      (die mit <code>@name</code>) haben eine Vorschauseite, die ohne
+      Anmeldung lesbar ist — von dort werden die neuesten Beiträge geholt.
+      <b>Kein Bot, kein Token, keine Zugangsdaten nötig.</b></p>
+    <p style="color:var(--dim)">Grenzen: nur öffentliche Kanäle, jeweils die
+      letzten rund 20 Beiträge. Private Kanäle und Gruppen gehen so nicht —
+      dafür ist Schritt 3 da.</p>
+    <label for="kan">Kanalnamen, einer pro Zeile (ohne @)</label>
+    <textarea id="kan" rows="4" placeholder="kanalname&#10;zweiterkanal"></textarea>
+    <button id="saveKan">Speichern und abrufen</button>
+    <div id="kanMeldung"></div>
+  </section>
+
+  <section>
+    <h2>2 · Bot für eigene Gruppen <span style="color:var(--dim)">— optional</span></h2>
     <ol>
       <li>In Telegram <b>@BotFather</b> öffnen, <code>/newbot</code> senden.</li>
       <li>Den Token kopieren (Form: <code>123456789:ABCdef…</code>).</li>
@@ -70,7 +88,7 @@ a{color:var(--phos)}
     </ol>
     <p><b>Wichtig:</b> Der Bot sieht nur, wo er selbst Mitglied ist, und nur
       Nachrichten <b>ab dem Beitritt</b>. Alte Beiträge kann er nicht lesen —
-      dafür ist Schritt 2 da. Aus fremden Kanälen leitest du interessante
+      dafür ist Schritt 3 da. Aus fremden Kanälen leitest du interessante
       Nachrichten in deine eigene Gruppe weiter.</p>
     <label for="tok">Bot-Token</label>
     <input id="tok" type="password" placeholder="123456789:ABCdef…" autocomplete="off">
@@ -79,13 +97,15 @@ a{color:var(--phos)}
   </section>
 
   <section>
-    <h2>2 · Verlauf einlesen (alle bisherigen Posts)</h2>
+    <h2>3 · Verlauf einlesen (alle bisherigen Posts)</h2>
     <ol>
       <li><b>Telegram Desktop</b> öffnen, den Kanal auswählen.</li>
       <li>Menü ⋮ → <b>Chatverlauf exportieren</b>.</li>
       <li>Format <b>JSON</b> wählen, Medien abwählen, exportieren.</li>
       <li>Die Datei <code>result.json</code> hier hochladen.</li>
     </ol>
+    <p><b>Das geht für jeden Chat, in dem du Mitglied bist</b> — du musst den
+      Kanal nicht besitzen. Das ist der Weg zu den alten Beiträgen.</p>
     <p>Jede Nachricht wird nach Stichworten den Meerengen zugeordnet und als
       Tageszählung gespeichert. Daraus entsteht der Verlauf, den die Karte
       anzeigt: wann wurde über welche Enge wie viel geschrieben.</p>
@@ -107,6 +127,7 @@ async function zustand() {
     $("zust").innerHTML =
       '<span class="zust"><span>Telegram: <b>' +
       (d.telegram ? "eingerichtet" : "nicht eingerichtet") + "</b></span>" +
+      "<span>Kanäle: <b>" + (d.kanaele.length || 0) + "</b></span>" +
       "<span>Verlauf: <b>" + (d.verlauf.gesamt || 0) + " Nachrichten</b>" +
       (d.verlauf.von ? " (" + d.verlauf.von + " bis " + d.verlauf.bis + ")" : "") +
       "</span></span>";
@@ -140,6 +161,26 @@ $("save").onclick = async () => {
     melde("tokMeldung", "Fehler: " + e.message, "err");
   }
   $("save").disabled = false;
+  zustand();
+};
+
+$("saveKan").onclick = async () => {
+  const liste = $("kan").value.split("\n").map((x) => x.trim()).filter(Boolean);
+  $("saveKan").disabled = true;
+  try {
+    const r = await fetch("api/einstellungen", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tg_kanaele: liste, tg_token: "" }),
+    });
+    const d = await r.json();
+    melde("kanMeldung", d.fehler
+      ? "Gespeichert, aber: " + d.fehler
+      : liste.length + " Kanal/Kanäle gespeichert. Beiträge werden alle zwei "
+        + "Minuten geholt.", d.fehler ? "err" : "ok");
+  } catch (e) {
+    melde("kanMeldung", "Fehler: " + e.message, "err");
+  }
+  $("saveKan").disabled = false;
   zustand();
 };
 

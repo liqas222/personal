@@ -22,6 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from functools import partial
+from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -219,9 +220,14 @@ def hole_feed():
     man die interessanten Nachrichten in eine eigene Gruppe weiter, in der
     der Bot sitzt. Das ist der praktikable Weg und kostet nichts.
     """
+    web, webfehler = hole_kanaele()
     if not CFG.get("tg_token"):
-        FEED.update({"fehler": "nicht eingerichtet", "beitraege": []})
-        return False
+        # Ohne Bot ist die Web-Vorschau der einzige laufende Kanal.
+        if not web:
+            FEED.update({"fehler": webfehler or "nicht eingerichtet",
+                         "beitraege": FEED.get("beitraege", [])})
+            return False
+        return _feed_zusammenfuehren(web, webfehler)
     try:
         d = _tg_get("getUpdates", {
             "offset": FEED.get("offset", 0),
@@ -254,15 +260,31 @@ def hole_feed():
             "text": text[:600],
             "engen": zuordnen(text),
         })
+    return _feed_zusammenfuehren(neu + web, webfehler, letzte)
+
+
+def _feed_zusammenfuehren(neu, webfehler=None, offset=None):
+    """Neues mit Bekanntem mischen, doppelte Einträge fallen weg."""
+    alt = FEED.get("beitraege", [])
+    gesehen = set()
+    zusammen = []
+    for b in neu + alt:
+        if b["id"] in gesehen:
+            continue
+        gesehen.add(b["id"])
+        zusammen.append(b)
+    zusammen.sort(key=lambda b: b["zeit"] or "", reverse=True)
+    zusammen = zusammen[:120]
     for b in neu:
-        verlauf_zaehlen(b["zeit"][:10], b["engen"])
-    if neu:
-        verlauf_speichern()
-    zusammen = (neu + alt)[:120]
-    FEED.update({"beitraege": zusammen, "offset": letzte, "fehler": None,
+        if b["id"] not in {x["id"] for x in alt}:
+            verlauf_zaehlen((b["zeit"] or "")[:10], b["engen"])
+    verlauf_speichern()
+    FEED.update({"beitraege": zusammen, "fehler": webfehler,
                  "quelle": "Telegram",
                  "konten": sorted({b["konto"] for b in zusammen}),
                  "stand": zusammen[0]["zeit"] if zusammen else None})
+    if offset is not None:
+        FEED["offset"] = offset
     try:
         with open(FEED_CACHE, "w") as f:
             json.dump(FEED, f)
@@ -366,6 +388,100 @@ def export_einlesen(roh):
             "von": VERLAUF["von"], "bis": VERLAUF["bis"]}, None
 
 
+# ---------------------------------------------------------------------------
+# Öffentliche Kanäle über die Web-Vorschau mitlesen.
+#
+# Ein Bot sieht nur, wo er Mitglied ist — in fremden Kanälen geht das nicht.
+# Öffentliche Kanäle haben aber eine Vorschauseite unter t.me/s/<name>, die
+# ohne Anmeldung die letzten Beiträge zeigt. Genau die wird hier gelesen.
+#
+# Grenzen, klar benannt: nur öffentliche Kanäle (die mit @name), nur die
+# letzten rund 20 Beiträge je Abruf, und keine Garantie — es ist eine
+# Webseite, kein zugesicherter Zugang. Für private Kanäle bleibt der Export.
+# ---------------------------------------------------------------------------
+
+LEER_TAGS = {"br", "img", "hr", "input", "meta", "link", "source", "wbr"}
+
+
+class VorschauLeser(HTMLParser):
+    """Zieht Text und Zeitstempel aus der Vorschauseite eines Kanals."""
+
+    def __init__(self):
+        HTMLParser.__init__(self)
+        self.beitraege = []
+        self._imText = 0
+        self._puffer = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        klasse = a.get("class", "")
+        if tag == "div" and "tgme_widget_message_text" in klasse:
+            self._imText = 1
+            self._puffer = []
+        elif self._imText:
+            # Leere Elemente haben kein schliessendes Gegenstück — sie dürfen
+            # den Zähler nicht erhöhen, sonst bleibt der Textblock offen und
+            # verschluckt alles Folgende samt Zeitstempel.
+            if tag in LEER_TAGS:
+                if tag == "br":
+                    self._puffer.append(" ")
+            else:
+                self._imText += 1
+        elif tag == "time" and a.get("datetime"):
+            # Der Zeitstempel steht im Seitenquelltext NACH dem Text, nicht
+            # davor. Er gehört deshalb an den zuletzt gelesenen Beitrag.
+            if self.beitraege and not self.beitraege[-1]["zeit"]:
+                self.beitraege[-1]["zeit"] = a["datetime"][:16]
+
+    def handle_endtag(self, tag):
+        if self._imText:
+            self._imText -= 1
+            if self._imText == 0:
+                # Zeilenumbrüche und Einrückung der Seite zusammenfassen,
+                # sonst steht der Beitrag zerrissen im Panel.
+                text = " ".join("".join(self._puffer).split())
+                if text:
+                    self.beitraege.append({"text": text, "zeit": None})
+
+    def handle_data(self, daten):
+        if self._imText:
+            self._puffer.append(daten)
+
+
+def hole_kanaele():
+    """Liest alle in tg_kanaele eingetragenen öffentlichen Kanäle."""
+    kanaele = CFG.get("tg_kanaele") or []
+    if not kanaele:
+        return [], None
+    raus, fehler = [], []
+    for name in kanaele[:15]:
+        name = name.strip().lstrip("@")
+        if not re.match(r"^[A-Za-z0-9_]{3,40}$", name):
+            fehler.append(name + ": ungültiger Kanalname")
+            continue
+        try:
+            url = CFG.get("tg_vorschau_url", "https://t.me/s/") + name
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; atlas/1.0)"})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                html = r.read().decode("utf-8", "replace")
+        except Exception as e:
+            fehler.append("%s: %s" % (name, type(e).__name__))
+            continue
+        leser = VorschauLeser()
+        leser.feed(html)
+        if not leser.beitraege:
+            fehler.append(name + ": keine Beiträge gefunden "
+                          "(privater Kanal oder Seite geändert?)")
+        for b in leser.beitraege:
+            raus.append({"id": "web:" + name + ":" + (b["zeit"] or ""),
+                         "konto": "@" + name,
+                         "zeit": b["zeit"] or "",
+                         "text": b["text"][:600],
+                         "engen": zuordnen(b["text"])})
+    return raus, ("; ".join(fehler) if fehler else None)
+
+
 def feed_schleife():
     """Alle zwei Minuten — Telegram kostet nichts."""
     while True:
@@ -403,6 +519,7 @@ class Handler(SimpleHTTPRequestHandler):
                      "/api/verlauf": VERLAUF,
                      "/api/zustand": {
                          "telegram": bool(CFG.get("tg_token")),
+                         "kanaele": CFG.get("tg_kanaele") or [],
                          "passwort": bool(CFG.get("auth_token")),
                          "verlauf": {k: VERLAUF[k] for k in
                                      ("gesamt", "von", "bis", "quelle")},
@@ -439,7 +556,15 @@ class Handler(SimpleHTTPRequestHandler):
                     {"fehler": "Das sieht nicht wie ein Bot-Token aus. "
                                "Erwartet: 123456789:ABCdef…"}, 400)
             neu = dict(CFG)
-            neu["tg_token"] = token
+            # Nur setzen, was mitgeschickt wurde — sonst löscht das Speichern
+            # der Kanäle den Bot-Token und umgekehrt.
+            if "tg_token" in daten and token:
+                neu["tg_token"] = token
+            elif "tg_token" in daten and not token and "tg_kanaele" not in daten:
+                neu["tg_token"] = ""
+            if "tg_kanaele" in daten:
+                neu["tg_kanaele"] = [k.strip().lstrip("@") for k in
+                                     (daten.get("tg_kanaele") or []) if k.strip()]
             pfad_cfg = os.path.join(BASE, "config.json")
             tmp = pfad_cfg + ".tmp"
             with open(tmp, "w") as f:
