@@ -17,6 +17,12 @@ let t0 = performance.now();
 /* Quiz-Zustand */
 let quiz = { frage: null, rest: [], antwort: null, punkte: 0, runden: 0 };
 
+/* Welche Lagebild-Ebenen eingeschaltet sind. Voreinstellung kommt aus
+   lagen.js — nur Konflikte und Chokepoint-Status, damit die Karte lesbar
+   startet und man den Rest bewusst dazuschaltet. */
+const AN = {};
+for (const e of EBENEN) AN[e.id] = e.an;
+
 /* Rollen der betroffenen Länder. Die drei Farben sind gegen den dunklen
    Untergrund und gegen Farbfehlsichtigkeit geprüft; zusätzlich trägt jedes
    Land seinen Namen, Farbe allein muss also nie ausreichen. */
@@ -27,15 +33,15 @@ const ROLLEN = {
 };
 
 const F = {
-  see: "#0e1520",
-  land: "#232a33",
-  landAktiv: "#2c3540",
-  kueste: "#465264",
-  ink: "#f2f4f7",
-  ink2: "#a8b2c1",
-  dim: "#6f7a8a",
-  marke: "#e66767",
-  markeAus: "#8d99ab",
+  see: "#050a0c",
+  land: "#16211f",
+  landAktiv: "#1b2926",
+  kueste: "#2f4f45",
+  ink: "#dfeae6",
+  ink2: "#8fa6a0",
+  dim: "#5d726f",
+  marke: "#ff2d2d",
+  markeAus: "#4e6b62",
 };
 
 /* Laender an der Datumsgrenze (Russland, Fidschi) springen in den Rohdaten
@@ -86,6 +92,8 @@ function init() {
   });
 
   bauListe();
+  bauEbenen();
+  bauStatuslegende();
   document.querySelectorAll("nav button[data-modus]").forEach((b) => {
     b.onclick = () => setModus(b.dataset.modus);
   });
@@ -280,6 +288,7 @@ function grundkarte() {
   const c = basis.getContext("2d");
   c.setTransform(DPR, 0, 0, DPR, 0, 0);
   zeichneLand(c, rollen);
+  zeichneRaster(c);
   basisSchluessel = schluessel;
   return basis;
 }
@@ -291,14 +300,296 @@ function zeichne(now) {
     if (ansicht === "betroffen") {
       zeichneRollenNamen(aktiv);
     } else {
+      // Die Lagebild-Ebenen gelten auch im Zoom — dort sind sie sogar
+      // nuetzlicher, weil sich die Ziele nicht mehr gegenseitig verdecken.
+      if (AN.konflikte) zeichneKonflikte(now);
+      if (AN.kontrolle) zeichneKontrollzonen();
       zeichneRouten(aktiv, now);
+      if (AN.vektoren) zeichneVektoren(now);
       zeichneOrte(aktiv);
       zeichneEngenName(aktiv);
+      if (AN.ziele) zeichneZiele(now);
+      if (AN.callouts) zeichneCallouts();
     }
   } else {
     zeichneMeere(markenKaesten());
+    if (AN.konflikte) zeichneKonflikte(now);
+    if (AN.kontrolle) zeichneKontrollzonen();
+    if (AN.vektoren) zeichneVektoren(now);
     zeichneMarken(now);
+    if (AN.ziele) zeichneZiele(now);
+    if (AN.callouts) zeichneCallouts();
   }
+  zeichneFadenkreuz();
+}
+
+/* ---------- Lagebild-Ebenen ---------- */
+
+function ringPfad(c, ring) {
+  c.beginPath();
+  ring.forEach((p, i) => {
+    const [x, y] = view.project(p[0], p[1]);
+    i ? c.lineTo(x, y) : c.moveTo(x, y);
+  });
+  c.closePath();
+}
+
+/* Ebene 1 — Konfliktzonen. Der Puls macht sie ohne Legende als "aktiv"
+   lesbar; die Farbe unterscheidet hoch von kritisch. */
+function zeichneKonflikte(now) {
+  const puls = 0.5 + 0.5 * Math.sin(now / 620);
+  // Im Zoom fuellt die Theaterflaeche das halbe Bild und ueberdeckt alles.
+  // Dann nur noch die Kante zeichnen.
+  const nah = view.bbox[2] - view.bbox[0] < 25;
+  const daempfer = nah ? 0.12 : 1;
+  for (const k of KONFLIKTE) {
+    const farbe = k.stufe === "kritisch" ? "#ff2d2d" : "#ff7a1f";
+    ringPfad(ctx, k.ring);
+    ctx.fillStyle = k.stufe === "kritisch"
+      ? "rgba(255,45,45," + (0.10 + 0.10 * puls) + ")"
+      : "rgba(255,122,31," + (0.08 + 0.08 * puls) + ")";
+    ctx.fill();
+    ctx.strokeStyle = farbe;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.55 + 0.45 * puls;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Eckwinkel wie in einem Zielrahmen
+    let w = 1e9, s = 1e9, e = -1e9, n = -1e9;
+    for (const p of k.ring) {
+      const [x, y] = view.project(p[0], p[1]);
+      w = Math.min(w, x); e = Math.max(e, x);
+      s = Math.min(s, y); n = Math.max(n, y);
+    }
+    ctx.strokeStyle = farbe;
+    ctx.lineWidth = 1.5;
+    const L = 13;
+    ctx.beginPath();
+    for (const [cx, cy, sx, sy] of [[w, s, 1, 1], [e, s, -1, 1], [w, n, 1, -1], [e, n, -1, -1]]) {
+      ctx.moveTo(cx, cy + sy * L); ctx.lineTo(cx, cy); ctx.lineTo(cx + sx * L, cy);
+    }
+    ctx.stroke();
+
+    ctx.font = "700 10px var(--mono)";
+    ctx.font = '700 10px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = farbe;
+    ctx.letterSpacing = "1.5px";
+    halo(k.t, w, s - 6);
+    ctx.letterSpacing = "0px";
+  }
+}
+
+/* Ebene 3 — Kontroll- und Blockadezonen, schraffiert statt gefuellt,
+   damit sie sich von den Konfliktflaechen unterscheiden. */
+function zeichneKontrollzonen() {
+  for (const z of KONTROLLZONEN) {
+    ringPfad(ctx, z.ring);
+    ctx.save();
+    ctx.clip();
+    let w = 1e9, s = 1e9, e = -1e9, n = -1e9;
+    for (const p of z.ring) {
+      const [x, y] = view.project(p[0], p[1]);
+      w = Math.min(w, x); e = Math.max(e, x);
+      s = Math.min(s, y); n = Math.max(n, y);
+    }
+    ctx.strokeStyle = "rgba(192,76,255,.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let d = w - (n - s); d < e; d += 9) {
+      ctx.moveTo(d, n);
+      ctx.lineTo(d + (n - s), s);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ringPfad(ctx, z.ring);
+    ctx.strokeStyle = "#c04cff";
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([7, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const [mx, my] = view.project(
+      z.ring.reduce((a, p) => a + p[0], 0) / z.ring.length,
+      z.ring.reduce((a, p) => a + p[1], 0) / z.ring.length);
+    ctx.font = '700 9px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#d79bff";
+    ctx.letterSpacing = "1.2px";
+    halo(z.t, mx, my);
+    ctx.letterSpacing = "0px";
+  }
+}
+
+/* Ebene 2 — Ziele und Schluesselanlagen als Rauten mit Datenkaestchen. */
+function zeichneZiele(now) {
+  const blink = 0.6 + 0.4 * Math.sin(now / 400);
+  const gesetzt = [];
+  for (const z of ZIELE) {
+    const [x, y] = view.project(z.p[0], z.p[1]);
+    if (x < -40 || x > W + 40 || y < -20 || y > H + 20) continue;
+    const farbe = ZIEL_TYPEN[z.typ].c;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI / 4);
+    ctx.strokeStyle = farbe;
+    ctx.lineWidth = 1.8;
+    ctx.globalAlpha = blink;
+    ctx.strokeRect(-5, -5, 10, 10);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = farbe;
+    ctx.fillRect(-2, -2, 4, 4);
+    ctx.restore();
+
+    ctx.font = '700 9px ui-monospace,Menlo,Consolas,monospace';
+    ctx.letterSpacing = "1px";
+    const b = ctx.measureText(z.t).width;
+    // Kaestchen abwechselnd rechts/links, damit sie sich seltener decken
+    let lx = x + 11, ly = y - 13;
+    const stoert = () => gesetzt.some((m) =>
+      !(lx + b + 6 < m[0] || lx > m[2] || ly + 12 < m[1] || ly - 4 > m[3]));
+    if (stoert()) { ly = y + 15; }
+    if (stoert()) { lx = x - b - 17; ly = y - 13; }
+    gesetzt.push([lx - 3, ly - 4, lx + b + 6, ly + 12]);
+    ctx.fillStyle = "rgba(4,8,10,.82)";
+    ctx.fillRect(lx - 3, ly - 3, b + 8, 13);
+    ctx.strokeStyle = farbe;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(lx - 3, ly - 3, b + 8, 13);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = farbe;
+    ctx.fillText(z.t, lx + 1, ly);
+    ctx.letterSpacing = "0px";
+  }
+}
+
+/* Ebene 5 — Kraftvektoren. Duenn, gestrichelt, laufend. */
+function zeichneVektoren(now) {
+  for (const v of VEKTOREN) {
+    const pts = v.p.map((p) => view.project(p[0], p[1]));
+    ctx.strokeStyle = "#ffb000";
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([9, 6]);
+    ctx.lineDashOffset = -(now / 40) % 15;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const a = pts[pts.length - 1], b = pts[pts.length - 2];
+    const w = Math.atan2(a[1] - b[1], a[0] - b[0]);
+    ctx.save();
+    ctx.translate(a[0], a[1]);
+    ctx.rotate(w);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-9, -4.5);
+    ctx.lineTo(-9, 4.5);
+    ctx.closePath();
+    ctx.fillStyle = "#ffb000";
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* Ebene 6 — Intel-Callouts: warum diese Stelle ueberhaupt zaehlt. */
+function zeichneCallouts() {
+  ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
+  // Boxen duerfen sich nicht ueberdecken — sonst ist die Ebene unlesbar,
+  // und genau das soll die Ebenensteuerung ja verhindern.
+  const belegt = [];
+  const frei = (r) => !belegt.some((m) =>
+    !(r[2] < m[0] || r[0] > m[2] || r[3] < m[1] || r[1] > m[3]));
+  for (const c of CALLOUTS) {
+    const [x, y] = view.project(c.p[0], c.p[1]);
+    if (x < 0 || x > W || y < 0 || y > H) continue;
+    const zeilen = umbruch(c.b, 30);
+    const bw = 190, bh = 16 + zeilen.length * 12;
+    // Vier Ankerstellen durchprobieren, sonst weglassen.
+    let bx = null, by = null;
+    for (const [dx, dy] of [[18, -bh - 14], [18, 16], [-bw - 18, -bh - 14], [-bw - 18, 16]]) {
+      const px = Math.min(Math.max(8, x + dx), W - bw - 8);
+      const py = Math.min(Math.max(8, y + dy), H - bh - 8);
+      if (frei([px - 4, py - 4, px + bw + 4, py + bh + 4])) { bx = px; by = py; break; }
+    }
+    if (bx === null) continue;
+    belegt.push([bx - 4, by - 4, bx + bw + 4, by + bh + 4]);
+    ctx.strokeStyle = "rgba(0,230,118,.55)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(bx + 10, by + bh);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(4,10,8,.9)";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#00e676";
+    ctx.strokeRect(bx, by, bw, bh);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#00e676";
+    ctx.letterSpacing = "1.4px";
+    ctx.font = '700 10px ui-monospace,Menlo,Consolas,monospace';
+    ctx.fillText(c.t, bx + 7, by + 5);
+    ctx.letterSpacing = "0px";
+    ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
+    ctx.fillStyle = "#9fd8bd";
+    zeilen.forEach((z, i) => ctx.fillText(z, bx + 7, by + 19 + i * 12));
+  }
+}
+
+function umbruch(t, n) {
+  const worte = t.split(" ");
+  const raus = [];
+  let z = "";
+  for (const w of worte) {
+    if ((z + " " + w).trim().length > n) { raus.push(z.trim()); z = w; }
+    else z += " " + w;
+  }
+  if (z.trim()) raus.push(z.trim());
+  return raus;
+}
+
+/* Fadenkreuz-Markierungen an den Kartenraendern. */
+function zeichneFadenkreuz() {
+  ctx.strokeStyle = "rgba(0,230,118,.32)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const L = 16;
+  for (const [x, y, sx, sy] of [[6, 6, 1, 1], [W - 6, 6, -1, 1],
+                                [6, H - 6, 1, -1], [W - 6, H - 6, -1, -1]]) {
+    ctx.moveTo(x, y + sy * L); ctx.lineTo(x, y); ctx.lineTo(x + sx * L, y);
+  }
+  ctx.moveTo(W / 2 - 8, 6); ctx.lineTo(W / 2 + 8, 6);
+  ctx.moveTo(W / 2, 6); ctx.lineTo(W / 2, 14);
+  ctx.stroke();
+}
+
+/* Gradnetz als dezentes Raster — gehoert zum Erscheinungsbild eines
+   Lagemonitors und hilft beim Abschaetzen von Entfernungen. */
+function zeichneRaster(ctx) {
+  const [vw, vs, ve, vn] = view.bbox;
+  const spanne = ve - vw;
+  const schritt = spanne > 120 ? 20 : spanne > 40 ? 10 : spanne > 12 ? 5 : spanne > 4 ? 1 : 0.5;
+  ctx.strokeStyle = "rgba(0,230,118,.07)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let lon = Math.ceil(vw / schritt) * schritt; lon <= ve; lon += schritt) {
+    const [x] = view.project(lon, 0);
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+  }
+  for (let lat = Math.ceil(vs / schritt) * schritt; lat <= vn; lat += schritt) {
+    const [, y] = view.project(0, lat);
+    if (y >= 0 && y <= H) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+    }
+  }
+  ctx.stroke();
 }
 
 function zeichneLand(ctx, rollen) {
@@ -419,23 +710,35 @@ function zeichneMarken(now) {
       continue;
     }
 
-    ctx.beginPath();
-    ctx.arc(x, y, (ist ? 7 : 5) * (ist ? puls : 1), 0, 7);
-    ctx.fillStyle = ist || geloest ? F.marke : F.markeAus;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = F.see;
-    ctx.stroke();
+    // Farbe nach Chokepoint-Status, wenn die Ebene an ist — sonst neutral.
+    const st = AN.status && STATUS[e.id] ? STATUS_FARBEN[STATUS[e.id].s].c : F.markeAus;
+    const r = ist ? 7 * puls : 5.5;
+    ctx.strokeStyle = st;
+    ctx.lineWidth = 1.8;
+    ctx.strokeRect(x - r, y - r, r * 2, r * 2);
+    ctx.fillStyle = st;
+    ctx.fillRect(x - 2, y - 2, 4, 4);
+    if (AN.status && STATUS[e.id] && STATUS[e.id].s !== "gruen") {
+      // Bedrohte Engen bekommen einen laufenden Ring — faellt im
+      // Randbereich des Blickfelds auf, ohne die Karte zuzukleistern.
+      ctx.globalAlpha = 0.75 - 0.55 * (puls - 0.65);
+      ctx.beginPath();
+      ctx.arc(x, y, r + 5 + 4 * puls, 0, 7);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
 
-    ctx.font = (ist ? "600 " : "") + "11px ui-sans-serif,system-ui,sans-serif";
+    ctx.font = (ist ? "700 " : "") + '10px ui-monospace,Menlo,Consolas,monospace';
+    ctx.letterSpacing = "1.2px";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     const tx = x + 10, ty = y - 9;
     ctx.lineWidth = 3;
     ctx.strokeStyle = F.see;
-    ctx.strokeText(e.kurz, tx, ty);
+    ctx.strokeText(e.kurz.toUpperCase(), tx, ty);
     ctx.fillStyle = ist ? F.ink : F.ink2;
-    ctx.fillText(e.kurz, tx, ty);
+    ctx.fillText(e.kurz.toUpperCase(), tx, ty);
+    ctx.letterSpacing = "0px";
   }
 
   // Im Quiz zusaetzlich: der geklickte Punkt und die Luftlinie zur Loesung.
@@ -616,6 +919,62 @@ function onClick(ev) {
   if (e) zeigeEnge(e);
 }
 
+/* ---------- Ebenen-Schaltpult ---------- */
+
+/* Wie viele Objekte eine Ebene beisteuert — steht im Schalter, damit man
+   vorher weiss, was man sich auf die Karte holt. */
+function ebenenAnzahl(id) {
+  return { konflikte: KONFLIKTE.length, ziele: ZIELE.length,
+           kontrolle: KONTROLLZONEN.length, status: Object.keys(STATUS).length,
+           vektoren: VEKTOREN.length, callouts: CALLOUTS.length }[id];
+}
+
+function bauEbenen() {
+  const el = document.getElementById("ebenen");
+  el.innerHTML =
+    '<div class="kopf">EBENEN <span id="ebZahl"></span></div>' +
+    EBENEN.map((e) =>
+      '<div class="zeile" data-eb="' + e.id + '" style="color:' + e.farbe + '">' +
+        '<span class="sw"></span>' +
+        '<span class="txt">' + e.t + '</span>' +
+        '<span class="anz">' + ebenenAnzahl(e.id) + '</span>' +
+      "</div>").join("") +
+    '<div class="fuss">Bewertung aus offenen Quellen. Statusangaben ' +
+    'veralten schnell — Datum prüfen.</div>';
+  el.querySelectorAll(".zeile").forEach((z) => {
+    z.onclick = () => schalteEbene(z.dataset.eb);
+  });
+  malEbenen();
+}
+
+function schalteEbene(id) {
+  AN[id] = !AN[id];
+  // Die Grundkarte muss neu, weil die Statusfarben dort nicht drinstecken —
+  // aber der Schluessel enthaelt die Ebenen nicht, also von Hand ungueltig.
+  basisSchluessel = "";
+  malEbenen();
+}
+
+function malEbenen() {
+  document.querySelectorAll("#ebenen .zeile").forEach((z) => {
+    z.classList.toggle("an", !!AN[z.dataset.eb]);
+  });
+  const n = EBENEN.filter((e) => AN[e.id]).length;
+  document.getElementById("ebZahl").textContent = n + "/" + EBENEN.length;
+  const lg = document.getElementById("lgEbenen");
+  if (lg) lg.textContent = n + " / " + EBENEN.length;
+}
+
+function bauStatuslegende() {
+  document.getElementById("statuslegende").innerHTML =
+    '<div class="z" style="color:var(--ink2);letter-spacing:1.6px;' +
+    'margin-bottom:6px">CHOKEPOINT-STATUS</div>' +
+    Object.keys(STATUS_FARBEN).map((k) =>
+      '<div class="z"><i style="background:' + STATUS_FARBEN[k].c +
+      ';box-shadow:0 0 7px ' + STATUS_FARBEN[k].c + '"></i>' +
+      STATUS_FARBEN[k].t + "</div>").join("");
+}
+
 /* ---------- Panel und Liste ---------- */
 
 function bauLegende(e) {
@@ -641,6 +1000,9 @@ function bauPanel(e) {
       zeile("Breite", e.breite) +
       zeile("Verkehr", e.menge) +
       zeile("Anrainer", e.anrainer) +
+      (STATUS[e.id] ? zeile("Status",
+        '<span style="color:' + STATUS_FARBEN[STATUS[e.id].s].c + '">■ ' +
+        STATUS_FARBEN[STATUS[e.id].s].t + "</span><br>" + STATUS[e.id].b) : "") +
       zeile("Kontrolle", e.betroffen.kontrolle
         .map((k) => "<b>" + k.t + "</b> — " + k.rolle).join("<br>")) +
     "</div>" +

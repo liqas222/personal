@@ -4,6 +4,12 @@ Ein Lernwerkzeug für Geopolitik: die Karte, die beim Zuhören fehlt. Wo liegt
 die Strasse von Hormuz, warum ist sie wichtig, was passiert, wenn sie zugeht —
 und wo genau ist das eigentlich auf dem Globus?
 
+Aufgemacht als Operationsmonitor: dunkles HUD, Phosphorgrün und Amber,
+Klassifizierungsbanner, Statusleiste. Das ist **Gestaltung, kein echtes
+Lagebild** — es steht ein Übungsvermerk daneben, damit die Karte nicht mit
+einem Verschlusssachen-Produkt verwechselt werden kann. Alle Inhalte stammen
+aus offenen Quellen, die Statuseinstufungen sind Bewertung, keine Meldung.
+
 Drei Ansichten:
 
 - **Weltkarte** — alle Meerengen als Marker. Klick zoomt an die Enge heran.
@@ -11,6 +17,11 @@ Drei Ansichten:
 - **Quiz** — „Wo liegt Bab el-Mandeb?", du klickst auf die Weltkarte, es misst
   die Entfernung zur richtigen Stelle in Kilometern. Das ist der Teil, von dem
   Geografie tatsächlich hängen bleibt.
+
+**Ebenen** (rechts zuschaltbar, damit die Karte nicht zukleistert):
+Aktuelle Konflikte und Chokepoint-Status sind voreingestellt an, militärische
+Ziele, Kontroll- und Blockadezonen, Kraftvektoren und Intel-Callouts aus. Die
+Ebenen gelten auch im Zoom auf eine einzelne Enge.
 
 Enthalten sind neun Nadelöhre: Hormuz, Bab el-Mandeb, Suez, Malakka, Taiwan,
 Bosporus/Dardanellen, Panama, Gibraltar, Dänische Meerengen.
@@ -39,6 +50,7 @@ Standardbibliothek. Copy-Paste-Befehle stehen in `DEPLOY.md`.
 | `static/index.html` | Gerüst und Gestaltung |
 | `static/geo.js` | Ringe dekodieren, Mercator-Projektion, Entfernungen |
 | `static/data.js` | **Die Inhalte** — Meerengen, Fakten, Seewege, Quellen |
+| `static/lagen.js` | **Das Lagebild** — Konflikte, Ziele, Status, Vektoren |
 | `static/atlas.js` | Zeichnen auf Canvas, Zoomflug, Klicks, Quiz |
 | `static/world.js` | Erzeugte Kartengeometrie (nicht von Hand ändern) |
 | `tools/build_map.py` | Erzeugt `world.js` aus den Natural-Earth-Daten |
@@ -112,6 +124,17 @@ Rasterzeile Höhe, die das Runden erzeugt) fallen weg.
 **Grenze der Daten:** Natural Earth schneidet sehr schmale Kanäle in den
 Länderpolygonen nicht aus. Der Bosporus ist dort massives Land, egal welche
 Auflösung — deshalb die `kanal`-Kennzeichnung statt feinerer Daten.
+
+## Ebenen ergänzen
+
+Alles Lagebezogene steht in `static/lagen.js`: `KONFLIKTE` (Theaterflächen als
+lon/lat-Ringe), `ZIELE`, `KONTROLLZONEN`, `STATUS` je Meerenge, `VEKTOREN`,
+`CALLOUTS`. Eine neue Ebene braucht zusätzlich einen Eintrag in `EBENEN` und
+eine Zeichenfunktion in `atlas.js`.
+
+Zwei Regeln für Inhalte dieser Art: nur öffentlich bekannte, seit Jahren
+beschriebene Standorte auf Kartenmassstab — nichts Feinkörniges. Und jede
+Statuseinstufung ist als Bewertung kenntlich, nicht als Meldung.
 
 ## Zu den Inhalten
 

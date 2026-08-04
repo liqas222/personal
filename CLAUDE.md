@@ -46,6 +46,18 @@ Siehe `README.md` für Aufbau und Bedienung.
 - **Nach jeder Änderung wirklich hinschauen.** `node --check` findet nur
   Syntaxfehler. Karten sind visuell — Screenshot machen und ansehen.
 
+## Lagebild-Ebenen
+
+- Inhalte in `static/lagen.js`, Zeichnen in `atlas.js`, Schaltpult rechts.
+- **Nur offene Quellen, nur Kartenmassstab.** Bekannte Standorte benennen ist
+  in Ordnung; alles Feinkörnigere gehört nicht hinein.
+- **Statuseinstufungen sind Bewertung, keine Meldung** — und müssen im UI als
+  solche kenntlich bleiben, samt Datum.
+- **Der Übungsvermerk neben dem Klassifizierungsbanner bleibt stehen.** Die
+  Aufmachung imitiert ein Verschlusssachen-Produkt; ohne den Vermerk wäre die
+  Seite ausserhalb des eigenen Bildschirms missverständlich.
+- Beim Zoomen die Theaterflächen dämpfen, sonst überdecken sie die Karte.
+
 ## Server-Umgebung — geteilter Droplet (falls je deployt wird)
 
 Der Droplet `ubuntu-s-1vcpu-1gb-fra1` (Frankfurt) hostet **mehrere Projekte**:

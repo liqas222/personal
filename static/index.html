@@ -6,31 +6,61 @@
 <title>Atlas — Meerengen der Weltpolitik</title>
 <style>
 :root{
-  --bg:#0b0f16; --flaeche:#0e1520; --panel:#131b26; --rand:#222c3a;
-  --ink:#f2f4f7; --ink2:#a8b2c1; --dim:#6f7a8a;
-  --blau:#3987e5; --orange:#d95926; --rot:#e66767; --gruen:#199e70;
+  --bg:#05070a; --flaeche:#070b10; --panel:#0a0f15; --rand:#1c2a33;
+  --ink:#dfeae6; --ink2:#8fa6a0; --dim:#5d726f;
+  --phos:#00e676;          /* Phosphorgrün — Chrome, aktive Schalter */
+  --amber:#ffb000;         /* Amber — Warnstufe, Hervorhebung */
+  --blut:#ff2d2d;          /* Blutrot — Bedrohung, Konflikt */
+  --blau:#3987e5; --orange:#d95926; --rot:#ff2d2d; --gruen:#00e676;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"DejaVu Sans Mono",monospace;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font:13px/1.5 var(--mono);
   display:flex;flex-direction:column;overflow:hidden}
 
-header{display:flex;align-items:center;gap:18px;padding:12px 18px;
-  border-bottom:1px solid var(--rand);background:#0a0e15;flex:none}
+/* Klassifizierungsbanner oben und unten — Stilelement. Der Übungsvermerk
+   steht bewusst daneben: die Karte darf nicht mit einem echten
+   Verschlusssachen-Produkt verwechselbar sein. */
+.klass{flex:none;background:#0b1f14;color:var(--phos);text-align:center;
+  font-size:11px;letter-spacing:2.5px;padding:4px 10px;font-weight:700;
+  border-bottom:1px solid #17402a;display:flex;justify-content:center;gap:16px}
+.klass .uebung{color:var(--amber);letter-spacing:1.5px}
+.klass.unten{border-bottom:0;border-top:1px solid #17402a}
+
+header{display:flex;align-items:center;gap:18px;padding:9px 14px;
+  border-bottom:1px solid var(--rand);background:#070b10;flex:none;
+  box-shadow:0 1px 0 #0d2a1c}
 .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:3px;
   font-size:13px;text-transform:uppercase}
-.logo b{color:var(--blau);font-size:18px;letter-spacing:0}
+.logo{color:var(--phos);text-shadow:0 0 12px #00e67655}
+.logo b{color:var(--phos);font-size:16px;letter-spacing:0}
 nav{display:flex;gap:4px;margin-left:8px}
-nav button{background:none;border:1px solid transparent;color:var(--ink2);
-  padding:6px 14px;border-radius:6px;cursor:pointer;font:inherit;font-size:13px}
-nav button:hover{color:var(--ink);background:#151d2a}
-nav button.an{color:var(--ink);background:#182231;border-color:var(--rand)}
-header .rechts{margin-left:auto;color:var(--dim);font-size:11px;text-align:right}
+nav button{background:none;border:1px solid #16303a;color:var(--ink2);
+  padding:5px 13px;cursor:pointer;font:inherit;font-size:11px;
+  letter-spacing:1.5px;text-transform:uppercase}
+nav button:hover{color:var(--phos);border-color:#1f4d3a}
+nav button.an{color:#04100a;background:var(--phos);border-color:var(--phos);
+  font-weight:700;box-shadow:0 0 14px #00e67655}
+header .rechts{margin-left:auto;color:var(--dim);font-size:10px;text-align:right;
+  letter-spacing:1px}
+header .zeit{color:var(--amber);font-size:13px;letter-spacing:2px;font-weight:700}
 
 main{flex:1;display:flex;min-height:0}
 #kartenfeld{flex:1;position:relative;min-width:0;overflow:hidden}
 canvas{display:block}
+/* Scanlines und leichtes Rauschen — rein visuell, liegt ueber der Karte und
+   faengt keine Klicks ab. */
+#kartenfeld::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,
+    rgba(0,0,0,.22) 0px, rgba(0,0,0,.22) 1px,
+    transparent 1px, transparent 3px);
+  mix-blend-mode:multiply}
+#kartenfeld::before{content:"";position:absolute;inset:0;pointer-events:none;
+  z-index:2;
+  background:radial-gradient(ellipse at center,
+    transparent 55%, rgba(0,0,0,.45) 100%)}
 
 /* Meldungen ueber der Karte */
 #zurueck{position:absolute;top:14px;left:14px;background:#131b26cc;
@@ -56,6 +86,44 @@ body:not([data-modus="detail"]) #ansichten{display:none}
   color:var(--dim);line-height:1.45}
 #hinweis{position:absolute;bottom:14px;left:14px;color:var(--dim);font-size:11px;
   background:#0b0f16aa;padding:5px 9px;border-radius:5px;pointer-events:none}
+
+/* Ebenen-Schaltpult */
+#ebenen{position:absolute;top:14px;right:14px;width:250px;
+  background:#060a0ee8;backdrop-filter:blur(8px);
+  border:1px solid #1c3a2e;font-size:11px;
+  box-shadow:0 0 30px #00000099, inset 0 0 40px #00e6760a}
+#ebenen .kopf{padding:7px 11px;border-bottom:1px solid #1c3a2e;
+  color:var(--phos);letter-spacing:2px;font-weight:700;font-size:10px;
+  display:flex;justify-content:space-between;align-items:center}
+#ebenen .kopf span{color:var(--dim);letter-spacing:1px;font-weight:400}
+#ebenen .zeile{display:flex;align-items:center;gap:10px;padding:8px 11px;
+  cursor:pointer;border-bottom:1px solid #0f1d18;user-select:none;
+  color:var(--dim);letter-spacing:.8px;transition:background .12s}
+#ebenen .zeile:last-child{border-bottom:0}
+#ebenen .zeile:hover{background:#0c1712}
+#ebenen .zeile.an{color:var(--ink)}
+/* Der Schalter selbst — Kippschalter mit Leuchtpunkt */
+#ebenen .sw{width:30px;height:14px;flex:none;border:1px solid #2a4a3c;
+  background:#0a1310;position:relative;transition:all .14s}
+#ebenen .sw::after{content:"";position:absolute;top:1px;left:1px;
+  width:10px;height:10px;background:#33443e;transition:all .14s}
+#ebenen .zeile.an .sw{border-color:currentColor;background:#0d2318}
+#ebenen .zeile.an .sw::after{left:17px;background:currentColor;
+  box-shadow:0 0 8px currentColor}
+#ebenen .zeile .txt{flex:1;min-width:0}
+#ebenen .zeile .anz{color:var(--dim);font-size:9px;letter-spacing:0}
+#ebenen .fuss{padding:7px 11px;border-top:1px solid #1c3a2e;color:var(--dim);
+  font-size:9px;letter-spacing:.6px;line-height:1.5}
+body[data-modus="liste"] #ebenen,body[data-modus="quiz"] #ebenen{display:none}
+
+/* Legende der Statusfarben */
+#statuslegende{position:absolute;bottom:14px;right:14px;
+  background:#060a0ee8;backdrop-filter:blur(8px);border:1px solid #1c3a2e;
+  padding:9px 12px;font-size:10px;letter-spacing:1px;color:var(--dim)}
+#statuslegende .z{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+#statuslegende .z:last-child{margin-bottom:0}
+#statuslegende i{width:9px;height:9px;flex:none;border-radius:50%}
+body:not([data-modus="welt"]) #statuslegende{display:none}
 
 /* Seitenpanel */
 #panel{width:400px;flex:none;border-left:1px solid var(--rand);background:var(--panel);
@@ -100,6 +168,18 @@ ul.q li{margin-bottom:5px}
 .karte .mini{color:var(--dim);font-size:11px;border-top:1px solid var(--rand);
   padding-top:8px}
 
+/* Statusleiste unten */
+#lage{flex:none;display:flex;align-items:stretch;background:#070b10;
+  border-top:1px solid var(--rand);font-size:10px;letter-spacing:1.6px}
+#lage .f{padding:7px 16px;border-right:1px solid var(--rand);
+  display:flex;align-items:center;gap:9px;color:var(--dim)}
+#lage .f b{color:var(--ink);font-weight:700}
+#lage .f.warn b{color:var(--amber)}
+#lage .f.krit b{color:var(--blut)}
+#lage .pkt{width:7px;height:7px;border-radius:50%;flex:none}
+#lage .rechts{margin-left:auto;border-right:0;border-left:1px solid var(--rand);
+  color:var(--dim)}
+
 /* Quiz */
 #quizleiste{display:none;align-items:center;gap:16px;padding:12px 18px;
   border-top:1px solid var(--rand);background:#0a0e15;flex:none}
@@ -132,15 +212,21 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 </head>
 <body data-modus="welt">
 
+<div class="klass">
+  <span>GEHEIM // REL USA, GBR, AUS, CAN, NZL // NOFORN</span>
+  <span class="uebung">◆ ÜBUNGSLAGE — OFFENE QUELLEN — KEINE VERSCHLUSSSACHE</span>
+</div>
+
 <header>
-  <div class="logo"><b>◈</b> Atlas</div>
+  <div class="logo"><b>◈</b> ATLAS // JOC</div>
   <nav>
-    <button data-modus="welt" class="an">Weltkarte</button>
+    <button data-modus="welt" class="an">Lagekarte</button>
     <button data-modus="liste">Meerengen</button>
-    <button data-modus="quiz">Quiz</button>
+    <button data-modus="quiz">Drill</button>
   </nav>
   <div class="rechts">
-    Karte: Natural Earth (Public Domain)<br><span id="stand"></span>
+    <div class="zeit" id="zeit">04 AUG 2026 // 15:51Z</div>
+    <span id="stand"></span> · Natural Earth (Public Domain)
   </div>
 </header>
 
@@ -153,7 +239,9 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
       <button data-ansicht="betroffen">Wer hängt daran</button>
     </div>
     <div id="legende" hidden></div>
-    <div id="hinweis">Klick auf einen Punkt, um die Meerenge zu öffnen.</div>
+    <div id="hinweis">Marker anwählen für Detailaufklärung.</div>
+    <div id="ebenen"></div>
+    <div id="statuslegende"></div>
   </div>
   <div id="liste"></div>
   <aside id="panel"></aside>
@@ -169,9 +257,25 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
   </div>
 </div>
 
+<div id="lage">
+  <div class="f"><span class="pkt" style="background:var(--amber);
+    box-shadow:0 0 8px var(--amber)"></span>GLOBALE BEDROHUNGSSTUFE:
+    <b class="warn" style="color:var(--amber)">ERHÖHT</b></div>
+  <div class="f">AKTIVE THEATER: <b id="lgTheater">4</b></div>
+  <div class="f krit">CHOKEPOINT STATUS: <b>KRITISCH</b></div>
+  <div class="f">EBENEN AKTIV: <b id="lgEbenen">2 / 6</b></div>
+  <div class="f rechts">QUELLE: OFFEN · BEWERTUNG, KEINE MELDUNG</div>
+</div>
+
+<div class="klass unten">
+  <span>GEHEIM // REL USA, GBR, AUS, CAN, NZL // NOFORN</span>
+  <span class="uebung">◆ ÜBUNGSLAGE — NICHT ZUR LAGEBEURTEILUNG</span>
+</div>
+
 <script src="world.js"></script>
 <script src="geo.js"></script>
 <script src="data.js"></script>
+<script src="lagen.js"></script>
 <script src="atlas.js"></script>
 </body>
 </html>
