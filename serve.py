@@ -12,6 +12,7 @@ was für lokales Ausprobieren genau richtig ist.
 """
 import base64
 import hmac
+import re
 import json
 import os
 import sys
@@ -253,6 +254,10 @@ def hole_feed():
             "text": text[:600],
             "engen": zuordnen(text),
         })
+    for b in neu:
+        verlauf_zaehlen(b["zeit"][:10], b["engen"])
+    if neu:
+        verlauf_speichern()
     zusammen = (neu + alt)[:120]
     FEED.update({"beitraege": zusammen, "offset": letzte, "fehler": None,
                  "quelle": "Telegram",
@@ -264,6 +269,101 @@ def hole_feed():
     except OSError:
         pass
     return True
+
+
+# ---------------------------------------------------------------------------
+# Verlauf auswerten: Zeitreihe der Erwähnungen je Meerenge.
+#
+# Aus einzelnen Nachrichten wird erst dann etwas Verstehbares, wenn man sieht,
+# WANN wie viel darüber geschrieben wurde. Ein Ausschlag im Verlauf ist die
+# Information — die einzelne Nachricht ist nur der Beleg dazu.
+# ---------------------------------------------------------------------------
+
+VERLAUF_DATEI = os.path.join(BASE, "data", "verlauf.json")
+VERLAUF = {"tage": {}, "gesamt": 0, "von": None, "bis": None, "quelle": None}
+
+
+def verlauf_laden():
+    try:
+        with open(VERLAUF_DATEI) as f:
+            VERLAUF.update(json.load(f))
+    except Exception:
+        pass
+
+
+def verlauf_speichern():
+    try:
+        os.makedirs(os.path.dirname(VERLAUF_DATEI), exist_ok=True)
+        tmp = VERLAUF_DATEI + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(VERLAUF, f)
+        os.replace(tmp, VERLAUF_DATEI)
+    except OSError:
+        pass
+
+
+def verlauf_zaehlen(datum, engen):
+    """Eine Nachricht in die Tageszählung einsortieren."""
+    if not datum:
+        return
+    tag = VERLAUF["tage"].setdefault(datum, {})
+    for eid in engen:
+        tag[eid] = tag.get(eid, 0) + 1
+    VERLAUF["gesamt"] += 1
+    if not VERLAUF["von"] or datum < VERLAUF["von"]:
+        VERLAUF["von"] = datum
+    if not VERLAUF["bis"] or datum > VERLAUF["bis"]:
+        VERLAUF["bis"] = datum
+
+
+def export_einlesen(roh):
+    """Verarbeitet einen Telegram-Desktop-Export (JSON).
+
+    Der Export enthält 'messages' mit 'date' und 'text'. Das Textfeld ist
+    entweder eine Zeichenkette oder eine Liste aus Stücken und Verweisen —
+    beides muss behandelt werden, sonst fehlt jede Nachricht mit einem Link.
+    """
+    nachrichten = roh.get("messages")
+    if not isinstance(nachrichten, list):
+        return None, "Kein Feld 'messages' — ist das ein Telegram-Export?"
+
+    def text_von(m):
+        t = m.get("text")
+        if isinstance(t, str):
+            return t
+        if isinstance(t, list):
+            return "".join(x if isinstance(x, str) else (x or {}).get("text", "")
+                           for x in t)
+        return ""
+
+    VERLAUF["tage"] = {}
+    VERLAUF["gesamt"] = 0
+    VERLAUF["von"] = VERLAUF["bis"] = None
+    VERLAUF["quelle"] = roh.get("name") or "Telegram-Export"
+    treffer = 0
+    beispiele = []
+    for m in nachrichten:
+        text = text_von(m)
+        if not text:
+            continue
+        datum = str(m.get("date") or "")[:10]
+        engen = zuordnen(text)
+        verlauf_zaehlen(datum, engen)
+        if engen:
+            treffer += 1
+            if len(beispiele) < 60:
+                beispiele.append({"id": "exp:" + str(m.get("id")),
+                                  "konto": VERLAUF["quelle"],
+                                  "zeit": str(m.get("date") or "")[:16],
+                                  "text": text[:600], "engen": engen})
+    verlauf_speichern()
+    # Die jüngsten Treffer aus dem Verlauf wandern in die Anzeige.
+    beispiele.sort(key=lambda b: b["zeit"], reverse=True)
+    FEED.update({"beitraege": (beispiele + FEED.get("beitraege", []))[:120],
+                 "fehler": None, "quelle": "Telegram-Export",
+                 "stand": beispiele[0]["zeit"] if beispiele else None})
+    return {"nachrichten": len(nachrichten), "mit_bezug": treffer,
+            "von": VERLAUF["von"], "bis": VERLAUF["bis"]}, None
 
 
 def feed_schleife():
@@ -283,6 +383,7 @@ def _feed_cache_laden():
 
 _cache_laden()
 _feed_cache_laden()
+verlauf_laden()
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -294,9 +395,19 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.pruefe_auth():
             return
         pfad = self.path.split("?")[0]
-        if pfad in ("/api/live", "/api/feed"):
-            koerper = json.dumps(
-                LIVE if pfad == "/api/live" else FEED).encode("utf-8")
+        if pfad == "/einstellungen":
+            self.path = "/einstellungen.html"
+            return super().do_GET()
+        if pfad in ("/api/live", "/api/feed", "/api/verlauf", "/api/zustand"):
+            daten = {"/api/live": LIVE, "/api/feed": FEED,
+                     "/api/verlauf": VERLAUF,
+                     "/api/zustand": {
+                         "telegram": bool(CFG.get("tg_token")),
+                         "passwort": bool(CFG.get("auth_token")),
+                         "verlauf": {k: VERLAUF[k] for k in
+                                     ("gesamt", "von", "bis", "quelle")},
+                     }}[pfad]
+            koerper = json.dumps(daten).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(koerper)))
@@ -305,6 +416,58 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(koerper)
             return
         super().do_GET()
+
+    def do_POST(self):
+        if not self.pruefe_auth():
+            return
+        pfad = self.path.split("?")[0]
+        laenge = int(self.headers.get("Content-Length") or 0)
+        if laenge > 200 * 1024 * 1024:
+            return self._antwort({"fehler": "Datei zu gross (max 200 MB)."}, 413)
+        roh = self.rfile.read(laenge) if laenge else b""
+        try:
+            daten = json.loads(roh.decode("utf-8", "replace")) if roh else {}
+        except ValueError as e:
+            return self._antwort({"fehler": "Kein gültiges JSON: %s" % e}, 400)
+
+        if pfad == "/api/einstellungen":
+            token = (daten.get("tg_token") or "").strip()
+            # Format grob prüfen, bevor etwas gespeichert wird — ein falsch
+            # eingefügter Token führt sonst zu stillem Nichtstun.
+            if token and not re.match(r"^\d{6,}:[\w-]{30,}$", token):
+                return self._antwort(
+                    {"fehler": "Das sieht nicht wie ein Bot-Token aus. "
+                               "Erwartet: 123456789:ABCdef…"}, 400)
+            neu = dict(CFG)
+            neu["tg_token"] = token
+            pfad_cfg = os.path.join(BASE, "config.json")
+            tmp = pfad_cfg + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(neu, f, indent=2, ensure_ascii=False)
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, pfad_cfg)
+            CFG.clear()
+            CFG.update(neu)
+            ok = hole_feed() if token else False
+            return self._antwort({"ok": True, "abruf": ok,
+                                  "fehler": FEED.get("fehler")})
+
+        if pfad == "/api/import":
+            bericht, fehler = export_einlesen(daten)
+            if fehler:
+                return self._antwort({"fehler": fehler}, 400)
+            return self._antwort({"ok": True, "bericht": bericht})
+
+        return self._antwort({"fehler": "Unbekannter Pfad"}, 404)
+
+    def _antwort(self, obj, code=200):
+        koerper = json.dumps(obj).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(koerper)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(koerper)
 
     def do_HEAD(self):
         if not self.pruefe_auth():

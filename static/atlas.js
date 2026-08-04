@@ -136,6 +136,7 @@ function init() {
 
   holeLive();
   holeFeed();
+  holeVerlauf();
   setInterval(holeFeed, 5 * 60 * 1000);
   document.body.dataset.frei = "nein";
   view = makeView(WELT_BBOX, W, H);
@@ -395,6 +396,7 @@ function zeichne(now) {
    keinen Server — dann bleibt es schlicht aus, statt Fehler zu werfen. */
 let LIVE = null;
 let FEED = null;
+let VERLAUF = null;
 
 async function holeLive() {
   const feld = document.getElementById("lgLive");
@@ -473,6 +475,54 @@ async function holeFeed() {
     feld.title = e.message;
   }
   if (aktiv && modus === "detail") bauPanel(aktiv);
+}
+
+async function holeVerlauf() {
+  try {
+    const r = await fetch("api/verlauf", { cache: "no-store" });
+    if (r.ok) VERLAUF = await r.json();
+  } catch (e) { VERLAUF = null; }
+  if (aktiv && modus === "detail") bauPanel(aktiv);
+}
+
+/* Wie viel wurde über diese Enge geschrieben, und wann? Wochenweise, weil
+   Tageswerte bei Kanälen zu zackig sind, um etwas zu erkennen. Der Ausschlag
+   ist die Information — nicht die einzelne Nachricht. */
+function verlaufBlock(engeId) {
+  if (!VERLAUF || !VERLAUF.gesamt) return "";
+  const wochen = {};
+  for (const [tag, zaehl] of Object.entries(VERLAUF.tage)) {
+    if (!zaehl[engeId]) continue;
+    // Auf den Wochenanfang runden.
+    const d = new Date(tag + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+    const k = d.toISOString().slice(0, 10);
+    wochen[k] = (wochen[k] || 0) + zaehl[engeId];
+  }
+  const keys = Object.keys(wochen).sort();
+  if (!keys.length) {
+    return '<h3>Verlauf der Erwähnungen</h3><p style="color:var(--dim);' +
+      'font-size:11px">In ' + VERLAUF.gesamt + " ausgewerteten Nachrichten " +
+      "kommt diese Enge nicht vor.</p>";
+  }
+  const werte = keys.map((k) => wochen[k]);
+  const max = Math.max(...werte);
+  const summe = werte.reduce((a, b) => a + b, 0);
+  const spitze = keys[werte.indexOf(max)];
+  const W = 360, H = 54;
+  const punkte = werte.map((v, i) =>
+    (keys.length < 2 ? W / 2 : (i / (keys.length - 1)) * W).toFixed(1) + "," +
+    (H - (v / max) * (H - 6)).toFixed(1)).join(" ");
+  return '<h3>Verlauf der Erwähnungen <span class="tag">Telegram</span></h3>' +
+    '<svg class="spark" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none">' +
+    '<polyline points="' + punkte + '" fill="none" stroke="#00e676" ' +
+    'stroke-width="1.8" vector-effect="non-scaling-stroke"/></svg>' +
+    '<div class="sparkf"><span>' + keys[0] + "</span><span>" +
+    keys[keys.length - 1] + "</span></div>" +
+    '<div class="hz"><span class="hk">Gesamt</span><span class="hv">' + summe +
+    " Nachrichten in " + keys.length + " Wochen</span></div>" +
+    '<div class="hz"><span class="hk">Spitze</span><span class="hv">' + max +
+    " in der Woche ab " + spitze + "</span></div>";
 }
 
 /* Meldungen zu genau dieser Meerenge, als Block fürs Panel. */
@@ -1652,6 +1702,7 @@ function bauPanel(e) {
     "<h3>Warum sie zählt</h3><p>" + e.warum + "</p>" +
     "<h3>Was man wissen sollte</h3><p>" + e.detail + "</p>" +
     '<h3>Lage <span class="tag">veraltet schnell</span></h3><p>' + e.lage + "</p>" +
+    verlaufBlock(e.id) +
     meldungsBlock(e.id) +
     "<h3>Gibt es einen Umweg?</h3><p>" + e.umweg + "</p>" +
     '<div class="legende">' +

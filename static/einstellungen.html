@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atlas — Zugänge</title>
+<style>
+:root{--bg:#05070a;--panel:#0a0f15;--rand:#1c2a33;--ink:#dfeae6;
+  --ink2:#8fa6a0;--dim:#5d726f;--phos:#00e676;--amber:#ffb000;--blut:#ff2d2d;
+  --mono:ui-monospace,Menlo,Consolas,"DejaVu Sans Mono",monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.6 var(--mono);
+  padding:0 0 60px}
+.klass{background:#0b1f14;color:var(--phos);text-align:center;font-size:11px;
+  letter-spacing:2.5px;padding:5px;font-weight:700;border-bottom:1px solid #17402a}
+.wrap{max-width:760px;margin:0 auto;padding:26px 20px}
+h1{font-size:17px;letter-spacing:3px;color:var(--phos);margin:0 0 4px}
+.sub{color:var(--dim);font-size:11px;margin-bottom:26px}
+section{background:var(--panel);border:1px solid var(--rand);padding:18px 20px;
+  margin-bottom:16px}
+h2{font-size:11px;letter-spacing:2px;color:var(--phos);margin:0 0 12px;
+  text-transform:uppercase}
+p{color:var(--ink2);margin:0 0 12px;font-size:12px}
+ol{color:var(--ink2);font-size:12px;padding-left:20px;margin:0 0 14px}
+li{margin-bottom:5px}
+label{display:block;color:var(--dim);font-size:10px;letter-spacing:1.5px;
+  margin-bottom:5px;text-transform:uppercase}
+input[type=text],input[type=password]{width:100%;background:#060a0e;
+  border:1px solid var(--rand);color:var(--ink);padding:9px 11px;font:inherit}
+input:focus{outline:none;border-color:var(--phos)}
+button{background:#0d2318;border:1px solid var(--phos);color:var(--phos);
+  padding:9px 18px;font:inherit;font-size:11px;letter-spacing:1.5px;cursor:pointer;
+  margin-top:12px}
+button:hover{background:#143623}
+button[disabled]{opacity:.5;cursor:default}
+.warn{border-left:3px solid var(--amber);background:#1a1405;padding:10px 13px;
+  color:#f0d9a0;font-size:11.5px;margin-bottom:14px}
+.err{border-left:3px solid var(--blut);background:#1a0808;color:#f4bcbc;
+  padding:10px 13px;font-size:11.5px;margin-top:12px}
+.ok{border-left:3px solid var(--phos);background:#06170f;color:#a9e9c6;
+  padding:10px 13px;font-size:11.5px;margin-top:12px}
+.zust{display:flex;gap:22px;flex-wrap:wrap;font-size:11px;color:var(--dim)}
+.zust b{color:var(--ink)}
+.drop{border:1px dashed #2a4a3c;padding:22px;text-align:center;color:var(--dim);
+  font-size:11.5px;cursor:pointer;background:#060c09}
+.drop.an{border-color:var(--phos);color:var(--phos)}
+a{color:var(--phos)}
+.zurueck{display:inline-block;margin-top:20px;color:var(--ink2);font-size:11px}
+</style>
+</head>
+<body>
+<div class="klass">ZUGÄNGE — NICHT ÖFFENTLICH TEILEN</div>
+<div class="wrap">
+  <h1>ATLAS // ZUGÄNGE</h1>
+  <div class="sub" id="zust">wird geladen …</div>
+
+  <div class="warn" id="schutzwarnung" hidden>
+    <b>Diese Seite ist nicht durch ein Passwort geschützt.</b> Eine
+    unbekannte Adresse ist keine Sicherung — wer die URL kennt, sieht diese
+    Seite. Setz <code>auth_token</code> in <code>config.json</code>, bevor du
+    hier einen Bot-Token einträgst.
+  </div>
+
+  <section>
+    <h2>1 · Telegram-Bot für neue Nachrichten</h2>
+    <ol>
+      <li>In Telegram <b>@BotFather</b> öffnen, <code>/newbot</code> senden.</li>
+      <li>Den Token kopieren (Form: <code>123456789:ABCdef…</code>).</li>
+      <li>Den Bot in <b>deine eigene Gruppe oder deinen Kanal</b> aufnehmen.</li>
+    </ol>
+    <p><b>Wichtig:</b> Der Bot sieht nur, wo er selbst Mitglied ist, und nur
+      Nachrichten <b>ab dem Beitritt</b>. Alte Beiträge kann er nicht lesen —
+      dafür ist Schritt 2 da. Aus fremden Kanälen leitest du interessante
+      Nachrichten in deine eigene Gruppe weiter.</p>
+    <label for="tok">Bot-Token</label>
+    <input id="tok" type="password" placeholder="123456789:ABCdef…" autocomplete="off">
+    <button id="save">Speichern und prüfen</button>
+    <div id="tokMeldung"></div>
+  </section>
+
+  <section>
+    <h2>2 · Verlauf einlesen (alle bisherigen Posts)</h2>
+    <ol>
+      <li><b>Telegram Desktop</b> öffnen, den Kanal auswählen.</li>
+      <li>Menü ⋮ → <b>Chatverlauf exportieren</b>.</li>
+      <li>Format <b>JSON</b> wählen, Medien abwählen, exportieren.</li>
+      <li>Die Datei <code>result.json</code> hier hochladen.</li>
+    </ol>
+    <p>Jede Nachricht wird nach Stichworten den Meerengen zugeordnet und als
+      Tageszählung gespeichert. Daraus entsteht der Verlauf, den die Karte
+      anzeigt: wann wurde über welche Enge wie viel geschrieben.</p>
+    <div class="drop" id="drop">Datei hierher ziehen oder klicken —
+      <code>result.json</code></div>
+    <input id="datei" type="file" accept=".json,application/json" hidden>
+    <div id="impMeldung"></div>
+  </section>
+
+  <a class="zurueck" href="./">← zurück zur Lagekarte</a>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function zustand() {
+  try {
+    const d = await (await fetch("api/zustand", { cache: "no-store" })).json();
+    $("zust").innerHTML =
+      '<span class="zust"><span>Telegram: <b>' +
+      (d.telegram ? "eingerichtet" : "nicht eingerichtet") + "</b></span>" +
+      "<span>Verlauf: <b>" + (d.verlauf.gesamt || 0) + " Nachrichten</b>" +
+      (d.verlauf.von ? " (" + d.verlauf.von + " bis " + d.verlauf.bis + ")" : "") +
+      "</span></span>";
+    $("schutzwarnung").hidden = !!d.passwort;
+  } catch (e) {
+    $("zust").textContent = "Server nicht erreichbar: " + e.message;
+  }
+}
+
+function melde(id, text, art) {
+  $(id).innerHTML = '<div class="' + art + '">' + text + "</div>";
+}
+
+$("save").onclick = async () => {
+  const t = $("tok").value.trim();
+  $("save").disabled = true;
+  try {
+    const r = await fetch("api/einstellungen", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tg_token: t }),
+    });
+    const d = await r.json();
+    if (d.fehler) melde("tokMeldung", d.fehler, "err");
+    else if (!t) melde("tokMeldung", "Token entfernt.", "ok");
+    else if (d.abruf) melde("tokMeldung",
+      "Gespeichert. Verbindung steht — neue Nachrichten werden ab jetzt gelesen.", "ok");
+    else melde("tokMeldung", "Gespeichert, aber der Abruf schlug fehl: " +
+      (d.fehler || "unbekannt") + ". Sitzt der Bot in einer Gruppe?", "err");
+    $("tok").value = "";
+  } catch (e) {
+    melde("tokMeldung", "Fehler: " + e.message, "err");
+  }
+  $("save").disabled = false;
+  zustand();
+};
+
+$("drop").onclick = () => $("datei").click();
+$("drop").ondragover = (e) => { e.preventDefault(); $("drop").classList.add("an"); };
+$("drop").ondragleave = () => $("drop").classList.remove("an");
+$("drop").ondrop = (e) => {
+  e.preventDefault();
+  $("drop").classList.remove("an");
+  if (e.dataTransfer.files[0]) lies(e.dataTransfer.files[0]);
+};
+$("datei").onchange = (e) => e.target.files[0] && lies(e.target.files[0]);
+
+async function lies(datei) {
+  melde("impMeldung", "Lese " + datei.name + " (" +
+    Math.round(datei.size / 1024) + " KB) …", "ok");
+  let text;
+  try {
+    text = await datei.text();
+  } catch (e) {
+    return melde("impMeldung", "Datei nicht lesbar: " + e.message, "err");
+  }
+  try {
+    const r = await fetch("api/import", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: text,
+    });
+    const d = await r.json();
+    if (d.fehler) return melde("impMeldung", d.fehler, "err");
+    const b = d.bericht;
+    melde("impMeldung",
+      "<b>" + b.nachrichten + " Nachrichten gelesen</b>, davon <b>" +
+      b.mit_bezug + "</b> mit Bezug zu einer Meerenge." +
+      (b.von ? " Zeitraum " + b.von + " bis " + b.bis + "." : "") +
+      ' Der Verlauf steht jetzt auf der <a href="./">Lagekarte</a>.', "ok");
+  } catch (e) {
+    melde("impMeldung", "Übertragung fehlgeschlagen: " + e.message, "err");
+  }
+  zustand();
+}
+
+zustand();
+</script>
+</body>
+</html>
