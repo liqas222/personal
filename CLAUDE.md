@@ -79,6 +79,10 @@ Siehe `README.md` für Aufbau und Bedienung.
   grösser wird.
 - **Der Ziehen-Merker muss getrennt geführt werden**: beim `click` ist das
   Ziehen längst beendet und `zieht` wieder null.
+- **Jedes Ein- und Ausblenden des Infofensters braucht `resize()`.** Sonst
+  behält die Leinwand ihre Breite und wird nur verdeckt, statt dass die Karte
+  kleiner wird. Galt schon für Panel und Quizleiste — und traf danach die
+  Länderauswahl noch einmal.
 - **Kein Schaltpult über der Karte.** Ebenen gehören in die Leiste unter den
   Kopf — ein Fenster über der Karte steht genau da, wo man hinschaut.
 

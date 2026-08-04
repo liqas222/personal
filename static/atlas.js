@@ -1453,7 +1453,12 @@ function onClick(ev) {
 /* Auswahlleiste und Panel neu aufbauen. */
 function malAuswahl() {
   const leiste = document.getElementById("auswahl");
+  const vorher = document.body.dataset.auswahl;
   document.body.dataset.auswahl = AUSWAHL.size ? "ja" : "nein";
+  // Das Infofenster nimmt der Karte Breite weg. Ohne Neumessung behält die
+  // Leinwand ihre alte Grösse und wird nur verdeckt — die Karte muss aber
+  // kleiner werden, damit weiterhin alles sichtbar bleibt.
+  if (vorher !== document.body.dataset.auswahl) requestAnimationFrame(resize);
   leiste.innerHTML = AUSWAHL.size
     ? '<span class="tit">AUSWAHL</span>' +
       [...AUSWAHL].map((n) =>
