@@ -44,7 +44,7 @@ Standardbibliothek. Copy-Paste-Befehle stehen in `DEPLOY.md`.
 | `tools/build_map.py` | Erzeugt `world.js` aus den Natural-Earth-Daten |
 | `tools/seeweg.js` | Sucht Seewege automatisch durchs Wasser (Autorenwerkzeug) |
 | `tools/pruefe_routen.js` | Prüft, ob jede gezeichnete Route im Wasser liegt |
-| `data/` | Quelldaten (Natural Earth 1:50 m, Public Domain) |
+| `data/` | Quelldaten (Natural Earth 1:10 m, Public Domain) |
 | `serve.py` | Auslieferung mit optionalem Passwortschutz |
 | `deploy/atlas.service` | systemd-Unit |
 
