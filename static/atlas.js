@@ -115,6 +115,10 @@ function init() {
     }
   });
   document.getElementById("zuruecksetzen").onclick = zurueckZurUebersicht;
+  document.getElementById("pZu").onclick = () => {
+    if (AUSWAHL.size) { AUSWAHL.clear(); malAuswahl(); }
+    else setModus("welt");
+  };
 
   bauListe();
   bauEbenen();
@@ -131,6 +135,8 @@ function init() {
   document.getElementById("stand").textContent = STAND;
 
   holeLive();
+  holeFeed();
+  setInterval(holeFeed, 5 * 60 * 1000);
   document.body.dataset.frei = "nein";
   view = makeView(WELT_BBOX, W, H);
   setModus("welt");
@@ -272,6 +278,7 @@ function zeigeEnge(e) {
     b.classList.remove("an")
   );
   fliegeZu(e.zoom);
+  document.getElementById("pTitel").textContent = e.name.toUpperCase();
   bauPanel(e);
   bauLegende(e);
   document.body.dataset.ansicht = "enge";
@@ -387,6 +394,7 @@ function zeichne(now) {
    IMF PortWatch abfragt). Beim Öffnen per Doppelklick vom Dateisystem gibt es
    keinen Server — dann bleibt es schlicht aus, statt Fehler zu werfen. */
 let LIVE = null;
+let FEED = null;
 
 async function holeLive() {
   const feld = document.getElementById("lgLive");
@@ -407,7 +415,52 @@ async function holeLive() {
   }
 }
 
-/* ---------- Auswahl von Ländern und Handelsbögen ---------- */
+/* Beiträge der verfolgten X-Konten. Ohne eingerichteten Zugang bleibt die
+   Anzeige sichtbar leer statt stillschweigend zu fehlen. */
+async function holeFeed() {
+  const feld = document.getElementById("lgFeed");
+  try {
+    const r = await fetch("api/feed", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    FEED = d;
+    if (d.fehler) {
+      feld.innerHTML = '<b style="color:var(--dim)">' +
+        (d.fehler === "nicht eingerichtet" ? "NICHT EINGERICHTET" : "FEHLER") + "</b>";
+      feld.title = d.fehler;
+    } else {
+      feld.innerHTML = '<b style="color:var(--phos)">' + d.beitraege.length +
+        " · " + d.konten.length + " KONTEN</b>";
+      feld.title = "Stand " + (d.stand || "?");
+    }
+  } catch (e) {
+    FEED = null;
+    feld.innerHTML = '<b style="color:var(--dim)">AUS</b>';
+    feld.title = e.message;
+  }
+  if (aktiv && modus === "detail") bauPanel(aktiv);
+}
+
+/* Meldungen zu genau dieser Meerenge, als Block fürs Panel. */
+function meldungsBlock(engeId) {
+  if (!FEED) return "";
+  const treffer = (FEED.beitraege || []).filter((b) => b.engen.includes(engeId));
+  const kopf = '<h3>Meldungen <span class="tag">X · ungeprüft</span></h3>';
+  if (FEED.fehler) {
+    return kopf + '<p style="color:var(--dim);font-size:11px">' +
+      (FEED.fehler === "nicht eingerichtet"
+        ? "Keine X-Konten hinterlegt. Zugangstoken und Konten in config.json eintragen."
+        : "Abruf fehlgeschlagen: " + FEED.fehler) + "</p>";
+  }
+  if (!treffer.length) {
+    return kopf + '<p style="color:var(--dim);font-size:11px">Keine der ' +
+      FEED.beitraege.length + " abgerufenen Meldungen erwähnt diese Enge.</p>";
+  }
+  return kopf + treffer.slice(0, 8).map((b) =>
+    '<div class="meld"><div class="mk">@' + b.konto +
+    '<span>' + (b.zeit || "").slice(0, 16).replace("T", " ") + "</span></div>" +
+    "<div class=\"mt\">" + b.text.replace(/[<>&]/g, "") + "</div></div>").join("");
+}
 
 /* Welches Land liegt an diesem Punkt? Ungerade Zahl von Ringkreuzungen
    heisst drin — Löcher (Enklaven, Seen) kippen die Parität und fallen damit
@@ -1212,6 +1265,7 @@ function trefferMarke(mx, my) {
    entstehen keine Ränder und nichts driftet. */
 
 let zieht = null;         // {x, y, bewegt} während des Ziehens
+let gezogen = false;      // war die letzte Mausgeste ein Ziehen?
 let frei = false;         // hat der Nutzer den Ausschnitt selbst verstellt?
 
 function bboxAusRechteck(x0, y0, x1, y1) {
@@ -1222,9 +1276,19 @@ function bboxAusRechteck(x0, y0, x1, y1) {
 
 function setzeAusschnitt(bbox, vonHand) {
   const spanne = bbox[2] - bbox[0];
-  // Grenzen: nicht weiter als die ganze Welt, nicht enger als ~5 km Breite.
-  if (spanne > 400 || spanne < 0.05) return;
-  if (bbox[3] > 88 || bbox[1] < -88) return;
+  const bisher = view.bbox[2] - view.bbox[0];
+  // Nicht enger als ~5 km, und nicht weiter herauszoomen als die Welt.
+  //
+  // Die Grenze darf das Verschieben nicht mitblockieren: im Weltbild ist der
+  // sichtbare Bereich breiter als 360 Grad (die Leinwand ist breiter als die
+  // Karte), und eine harte Obergrenze hat deshalb jede Bewegung abgelehnt.
+  // Also nur ablehnen, wenn der Ausschnitt tatsächlich noch grösser wird.
+  if (spanne < 0.05) return;
+  if (spanne > 500 && spanne > bisher + 0.01) return;
+  // Breitengrade begrenzen, statt die Bewegung zu verwerfen — sonst klemmt
+  // die Karte am Rand fest.
+  if (bbox[3] > 89) { const d = bbox[3] - 89; bbox = [bbox[0], bbox[1] - d, bbox[2], 89]; }
+  if (bbox[1] < -89) { const d = -89 - bbox[1]; bbox = [bbox[0], -89, bbox[2], bbox[3] + d]; }
   anim = null;
   ziel = null;
   view = makeView(bbox, W, H);
@@ -1262,6 +1326,7 @@ function onDown(ev) {
   if (ev.button !== 0) return;
   const [x, y] = mausPos(ev);
   zieht = { x: x, y: y, bewegt: 0 };
+  gezogen = false;
   cv.style.cursor = "grabbing";
 }
 
@@ -1283,6 +1348,7 @@ function onMove(ev) {
   if (zieht) {
     const dx = mx - zieht.x, dy = my - zieht.y;
     zieht.bewegt += Math.abs(dx) + Math.abs(dy);
+    if (zieht.bewegt > 5) gezogen = true;
     setzeAusschnitt(bboxAusRechteck(-dx, -dy, W - dx, H - dy), true);
     // Nach dem Verschieben zeigt derselbe Punkt auf neue Koordinaten.
     zieht.x = mx;
@@ -1364,7 +1430,9 @@ function onClick(ev) {
     return;
   }
   // Ein Klick, der eigentlich ein Ziehen war, darf nichts auswählen.
-  if (zieht && zieht.bewegt > 5) return;
+  // Der Merker muss getrennt geführt werden: beim Klick ist das Ziehen
+  // bereits beendet und zieht wieder null.
+  if (gezogen) { gezogen = false; return; }
   const e = trefferMarke(mx, my);
   if (e) { zeigeEnge(e); return; }
   // In der Rollen-Ansicht bedeuten die Farben etwas anderes — dort keine
@@ -1399,7 +1467,11 @@ function malAuswahl() {
       malAuswahl();
     };
   });
-  if (AUSWAHL.size) bauHandelPanel();
+  if (AUSWAHL.size) {
+    document.getElementById("pTitel").textContent =
+      "HANDELSPROFIL · " + AUSWAHL.size;
+    bauHandelPanel();
+  }
 }
 
 function bauHandelPanel() {
@@ -1407,7 +1479,7 @@ function bauHandelPanel() {
     '<div class="hz"><span class="hk">' + t + '</span><span class="hv">' +
     arr.join(" · ") + "</span></div>";
   const namen = (arr) => arr.map((n) => (HANDEL[n] && HANDEL[n].t) || n);
-  document.getElementById("panel").innerHTML =
+  document.getElementById("pInhalt").innerHTML =
     '<h2>Handelsprofile</h2><div class="reg">' + AUSWAHL.size +
     " Land(e) ausgewählt</div>" +
     [...AUSWAHL].map((n) => {
@@ -1449,7 +1521,6 @@ function ebenenAnzahl(id) {
 function bauEbenen() {
   const el = document.getElementById("ebenen");
   el.innerHTML =
-    '<div class="kopf">EBENEN <span id="ebZahl"></span></div>' +
     EBENEN.map((e) =>
       '<div class="zeile" data-eb="' + e.id + '" style="color:' + e.farbe + '">' +
         '<span class="sw"></span>' +
@@ -1477,7 +1548,8 @@ function malEbenen() {
     z.classList.toggle("an", !!AN[z.dataset.eb]);
   });
   const n = EBENEN.filter((e) => AN[e.id]).length;
-  document.getElementById("ebZahl").textContent = n + "/" + EBENEN.length;
+  const z = document.getElementById("ebZahl2");
+  if (z) z.textContent = n + " / " + EBENEN.length + " AKTIV";
   const lg = document.getElementById("lgEbenen");
   if (lg) lg.textContent = n + " / " + EBENEN.length;
 }
@@ -1515,7 +1587,7 @@ function bauPanel(e) {
   const rf = (r) => ROUTEN_FARBEN[r.f];
   const zeile = (k, v) =>
     '<div class="z"><span class="k">' + k + '</span><span class="v">' + v + "</span></div>";
-  document.getElementById("panel").innerHTML =
+  document.getElementById("pInhalt").innerHTML =
     '<h2>' + e.name + "</h2>" +
     '<div class="reg">' + e.region + "</div>" +
     '<div class="fakten">' +
@@ -1536,6 +1608,7 @@ function bauPanel(e) {
     "<h3>Warum sie zählt</h3><p>" + e.warum + "</p>" +
     "<h3>Was man wissen sollte</h3><p>" + e.detail + "</p>" +
     '<h3>Lage <span class="tag">veraltet schnell</span></h3><p>' + e.lage + "</p>" +
+    meldungsBlock(e.id) +
     "<h3>Gibt es einen Umweg?</h3><p>" + e.umweg + "</p>" +
     '<div class="legende">' +
       e.routen
@@ -1545,7 +1618,7 @@ function bauPanel(e) {
     '<h3>Quellen</h3><ul class="q">' +
       e.quellen.map((q) => "<li>" + q + "</li>").join("") +
     "</ul>";
-  document.getElementById("panel").scrollTop = 0;
+  document.getElementById("pInhalt").scrollTop = 0;
 }
 
 /* An der Wortgrenze abschneiden — "Nordostasien — und auf der Insel dahi…"

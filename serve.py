@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -144,7 +145,121 @@ def live_schleife():
         time.sleep(6 * 3600)
 
 
+# ---------------------------------------------------------------------------
+# X-Konten verfolgen und Beiträge auswerten.
+#
+# WICHTIG: Das Lesen von Beiträgen erfordert bei X einen kostenpflichtigen
+# API-Zugang. Ohne Zugangstoken bleibt diese Ebene schlicht aus — sichtbar,
+# nicht heimlich. In config.json:
+#
+#   "x_bearer": "AAAA...",              Bearer-Token
+#   "x_konten": ["Konto1", "Konto2"]    ohne @
+#
+# Ausgewertet wird bewusst simpel und nachvollziehbar: Beiträge werden nach
+# Stichworten den Meerengen zugeordnet. Keine Stimmungsanalyse und keine
+# Bewertung des Wahrheitsgehalts — das kann eine Stichwortsuche nicht, und so
+# zu tun wäre irreführend.
+# ---------------------------------------------------------------------------
+
+X_API = "https://api.x.com/2"
+
+X_STICH = {
+    "hormuz": ["hormuz", "hormus", "persian gulf", "persischer golf"],
+    "babelmandeb": ["bab el-mandeb", "bab al-mandab", "bab-el-mandeb",
+                    "red sea", "rotes meer", "houthi", "huthi"],
+    "suez": ["suez", "suezkanal", "suez canal"],
+    "malakka": ["malacca", "malakka"],
+    "taiwan": ["taiwan strait", "taiwanstrasse", "taiwan-strasse"],
+    "bosporus": ["bosphorus", "bosporus", "dardanelles", "montreux"],
+    "panama": ["panama canal", "panamakanal"],
+    "gibraltar": ["gibraltar"],
+    "daenemark": ["baltic sea", "ostsee", "oresund", "great belt",
+                  "danish strait", "shadow fleet", "schattenflotte"],
+}
+
+FEED = {"stand": None, "beitraege": [], "konten": [],
+        "fehler": "nicht eingerichtet"}
+FEED_CACHE = os.path.join(BASE, "data", "feed.json")
+
+
+def _x_get(pfad, params):
+    url = X_API + pfad + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={
+        "Authorization": "Bearer " + CFG["x_bearer"],
+        "User-Agent": "atlas/1.0"})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        return json.loads(r.read().decode("utf-8", "replace"))
+
+
+def zuordnen(text):
+    """Welche Meerengen kommen in diesem Text vor?"""
+    t = text.lower()
+    return [eid for eid, worte in X_STICH.items() if any(w in t for w in worte)]
+
+
+def hole_feed():
+    konten = CFG.get("x_konten") or []
+    if not CFG.get("x_bearer") or not konten:
+        FEED.update({"fehler": "nicht eingerichtet", "beitraege": [],
+                     "konten": konten})
+        return False
+    try:
+        # Eine Abfrage für alle Konten zusammen — bei den engen Kontingenten
+        # der X-API ist das der entscheidende Punkt.
+        von = " OR ".join("from:" + k.lstrip("@") for k in konten[:20])
+        d = _x_get("/tweets/search/recent", {
+            "query": "(" + von + ") -is:retweet",
+            "max_results": 100,
+            "tweet.fields": "created_at,author_id",
+            "expansions": "author_id",
+            "user.fields": "username",
+        })
+    except Exception as e:      # Netz, Auth, Kontingent — alles gleich
+        FEED.update({"fehler": "%s: %s" % (type(e).__name__, e)})
+        return False
+
+    if d.get("errors") and not d.get("data"):
+        FEED.update({"fehler": str(d["errors"])[:200]})
+        return False
+
+    namen = {u["id"]: u["username"]
+             for u in (d.get("includes") or {}).get("users", [])}
+    raus = []
+    for t in d.get("data") or []:
+        text = t.get("text", "")
+        raus.append({"id": t.get("id"),
+                     "konto": namen.get(t.get("author_id"), "?"),
+                     "zeit": t.get("created_at"),
+                     "text": text,
+                     "engen": zuordnen(text)})
+    raus.sort(key=lambda b: b["zeit"] or "", reverse=True)
+    FEED.update({"beitraege": raus[:60], "konten": konten, "fehler": None,
+                 "stand": raus[0]["zeit"] if raus else None})
+    try:
+        with open(FEED_CACHE, "w") as f:
+            json.dump(FEED, f)
+    except OSError:
+        pass
+    return True
+
+
+def feed_schleife():
+    """Alle 15 Minuten — schont das Kontingent."""
+    while True:
+        hole_feed()
+        time.sleep(15 * 60)
+
+
+def _feed_cache_laden():
+    try:
+        with open(FEED_CACHE) as f:
+            FEED.update(json.load(f))
+    except Exception:
+        pass
+
+
 _cache_laden()
+_feed_cache_laden()
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -155,8 +270,10 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self.pruefe_auth():
             return
-        if self.path.split("?")[0] == "/api/live":
-            koerper = json.dumps(LIVE).encode("utf-8")
+        pfad = self.path.split("?")[0]
+        if pfad in ("/api/live", "/api/feed"):
+            koerper = json.dumps(
+                LIVE if pfad == "/api/live" else FEED).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(koerper)))
@@ -210,11 +327,14 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     threading.Thread(target=live_schleife, daemon=True).start()
+    threading.Thread(target=feed_schleife, daemon=True).start()
     handler = partial(Handler, directory=STATIC)
     srv = ThreadingHTTPServer((CFG["host"], int(CFG["port"])), handler)
     schutz = "mit Passwort" if CFG.get("auth_token") else "OHNE Passwort"
     print("Atlas läuft auf %s:%s (%s)" % (CFG["host"], CFG["port"], schutz))
     print("Live-Daten: IMF PortWatch, Abruf alle 6 h — Status unter /api/live")
+    print("X-Konten: %s — Status unter /api/feed"
+          % (", ".join(CFG.get("x_konten") or []) or "keine eingerichtet"))
     srv.serve_forever()
 
 

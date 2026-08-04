@@ -158,6 +158,26 @@ Zusätzlich wird die **zweite Reihe** eingefärbt: Länder, die nicht selbst an
 der Enge hängen, aber an einem Land, das dort hängt. Die Liste wird aus den
 Handelspartnern der ersten Reihe abgeleitet, nicht von Hand gepflegt.
 
+## X-Konten verfolgen
+
+`serve.py` kann Beiträge verfolgter X-Konten abrufen und sie den Meerengen
+zuordnen. Sie erscheinen im Detailpanel der jeweiligen Enge.
+
+```json
+"x_bearer": "AAAA…",
+"x_konten": ["konto1", "konto2"]
+```
+
+**Das Lesen von Beiträgen erfordert bei X einen kostenpflichtigen
+API-Zugang.** Ohne Token bleibt die Ebene sichtbar leer („MELDUNGEN: NICHT
+EINGERICHTET"), der Atlas funktioniert vollständig weiter.
+
+Die Auswertung ist bewusst eine **Stichwortzuordnung**, keine Bewertung:
+ein Beitrag, der „Strait of Hormuz" enthält, landet bei Hormuz. Keine
+Stimmungsanalyse und keine Prüfung des Wahrheitsgehalts — das kann eine
+Stichwortsuche nicht, und so zu tun wäre irreführend. Deshalb steht an den
+Meldungen „ungeprüft".
+
 ## Live-Daten
 
 `serve.py` holt alle sechs Stunden die täglichen Durchfahrten je Meerenge von

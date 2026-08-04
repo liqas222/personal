@@ -70,6 +70,18 @@ Siehe `README.md` für Aufbau und Bedienung.
 - Live-Abruf (IMF PortWatch) in `serve.py`: fällt er aus, muss das im UI
   sichtbar sein (`LIVE: AUS`) — nie stillschweigend auf Alt-Daten fallen.
 
+## Bedienung — Fallstricke
+
+- **Grenzen dürfen das Verschieben nicht blockieren.** Im Weltbild ist der
+  sichtbare Bereich breiter als 360°, weil die Leinwand breiter ist als die
+  Karte. Eine harte Obergrenze auf die Spannweite hat deshalb jede
+  Ziehbewegung verworfen. Nur ablehnen, wenn der Ausschnitt tatsächlich noch
+  grösser wird.
+- **Der Ziehen-Merker muss getrennt geführt werden**: beim `click` ist das
+  Ziehen längst beendet und `zieht` wieder null.
+- **Kein Schaltpult über der Karte.** Ebenen gehören in die Leiste unter den
+  Kopf — ein Fenster über der Karte steht genau da, wo man hinschaut.
+
 ## Server-Umgebung — geteilter Droplet (falls je deployt wird)
 
 Der Droplet `ubuntu-s-1vcpu-1gb-fra1` (Frankfurt) hostet **mehrere Projekte**:

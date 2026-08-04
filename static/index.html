@@ -98,34 +98,30 @@ body:not([data-modus="detail"]) #legende{display:none}
 body:not([data-frei="ja"]) #zuruecksetzen{display:none}
 body[data-modus="detail"][data-frei="ja"] #zuruecksetzen{left:auto;right:280px;top:14px}
 
-/* Ebenen-Schaltpult */
-#ebenen{position:absolute;top:14px;right:14px;width:250px;
-  background:#060a0ee8;backdrop-filter:blur(8px);
-  border:1px solid #1c3a2e;font-size:11px;
-  box-shadow:0 0 30px #00000099, inset 0 0 40px #00e6760a}
-#ebenen .kopf{padding:7px 11px;border-bottom:1px solid #1c3a2e;
-  color:var(--phos);letter-spacing:2px;font-weight:700;font-size:10px;
-  display:flex;justify-content:space-between;align-items:center}
-#ebenen .kopf span{color:var(--dim);letter-spacing:1px;font-weight:400}
-#ebenen .zeile{display:flex;align-items:center;gap:10px;padding:8px 11px;
-  cursor:pointer;border-bottom:1px solid #0f1d18;user-select:none;
-  color:var(--dim);letter-spacing:.8px;transition:background .12s}
-#ebenen .zeile:last-child{border-bottom:0}
-#ebenen .zeile:hover{background:#0c1712}
-#ebenen .zeile.an{color:var(--ink)}
-/* Der Schalter selbst — Kippschalter mit Leuchtpunkt */
-#ebenen .sw{width:30px;height:14px;flex:none;border:1px solid #2a4a3c;
-  background:#0a1310;position:relative;transition:all .14s}
-#ebenen .sw::after{content:"";position:absolute;top:1px;left:1px;
-  width:10px;height:10px;background:#33443e;transition:all .14s}
-#ebenen .zeile.an .sw{border-color:currentColor;background:#0d2318}
-#ebenen .zeile.an .sw::after{left:17px;background:currentColor;
+/* Ebenenleiste — fest unter dem Kopf statt als Fenster über der Karte.
+   Ein Schaltpult, das die Karte verdeckt, ist genau da im Weg, wo man
+   hinschaut. */
+#leiste{flex:none;display:flex;align-items:stretch;gap:0;background:#070b10;
+  border-bottom:1px solid var(--rand);overflow-x:auto}
+#leiste .lb{display:flex;align-items:center;padding:0 12px;color:var(--dim);
+  font-size:9px;letter-spacing:2px;flex:none;border-right:1px solid var(--rand)}
+#leiste .lb.re{margin-left:auto;border-right:0;border-left:1px solid var(--rand);
+  color:var(--phos)}
+#ebenen{display:flex;flex:1;min-width:0}
+#ebenen .zeile{display:flex;align-items:center;gap:8px;padding:7px 13px;
+  cursor:pointer;user-select:none;color:var(--dim);letter-spacing:1px;
+  font-size:10px;border-right:1px solid #101c18;white-space:nowrap;
+  transition:background .12s}
+#ebenen .zeile:hover{background:#0c1712;color:var(--ink)}
+#ebenen .zeile.an{color:var(--ink);background:#0b1710}
+/* Der Schalter selbst — kleine Leuchtdiode */
+#ebenen .sw{width:9px;height:9px;flex:none;border:1px solid #2a4a3c;
+  background:#0a1310;transition:all .14s}
+#ebenen .zeile.an .sw{border-color:currentColor;background:currentColor;
   box-shadow:0 0 8px currentColor}
-#ebenen .zeile .txt{flex:1;min-width:0}
-#ebenen .zeile .anz{color:var(--dim);font-size:9px;letter-spacing:0}
-#ebenen .fuss{padding:7px 11px;border-top:1px solid #1c3a2e;color:var(--dim);
-  font-size:9px;letter-spacing:.6px;line-height:1.5}
-body[data-modus="liste"] #ebenen,body[data-modus="quiz"] #ebenen{display:none}
+#ebenen .anz{color:var(--dim);font-size:9px}
+#ebenen .kopf,#ebenen .fuss{display:none}
+body[data-modus="quiz"] #leiste{display:none}
 
 /* Legende der Statusfarben */
 #statuslegende{position:absolute;bottom:14px;right:14px;
@@ -163,12 +159,26 @@ body[data-modus="welt"][data-auswahl="ja"] #panel{display:block}
 .eng .pkt{width:7px;height:7px;border-radius:50%;flex:none}
 .eng .pct{color:var(--amber);font-weight:700}
 .eng .qq{flex-basis:100%;color:var(--dim);font-size:10px;padding-left:14px}
+.meld{border-left:2px solid #1f5a3e;padding:6px 0 6px 10px;margin:8px 0;
+  background:#0a1310}
+.meld .mk{display:flex;justify-content:space-between;color:var(--phos);
+  font-size:10px;letter-spacing:1px;margin-bottom:3px}
+.meld .mk span{color:var(--dim);letter-spacing:0}
+.meld .mt{color:#cfe0d8;font-size:11.5px;line-height:1.45}
 .quelle{margin-top:20px;padding-top:12px;border-top:1px solid var(--rand);
   color:var(--dim);font-size:10px;line-height:1.5}
 
 /* Seitenpanel */
-#panel{width:400px;flex:none;border-left:1px solid var(--rand);background:var(--panel);
-  overflow-y:auto;padding:22px 24px 40px}
+#panel{width:410px;flex:none;border-left:2px solid #16302a;background:var(--panel);
+  display:flex;flex-direction:column;min-height:0;
+  box-shadow:-14px 0 30px #00000066}
+.pkopf{flex:none;display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;border-bottom:1px solid var(--rand);background:#070b10;
+  color:var(--phos);font-size:10px;letter-spacing:2.5px;font-weight:700}
+.pkopf button{background:none;border:1px solid #24403a;color:var(--ink2);
+  width:22px;height:22px;cursor:pointer;font:inherit;font-size:14px;line-height:1}
+.pkopf button:hover{color:var(--blut);border-color:var(--blut)}
+#pInhalt{flex:1;overflow-y:auto;padding:20px 22px 40px;min-height:0}
 #panel h2{margin:0;font-size:21px;line-height:1.25}
 #panel .reg{color:var(--blau);font-size:11px;letter-spacing:2px;
   text-transform:uppercase;margin:6px 0 18px}
@@ -271,6 +281,12 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
   </div>
 </header>
 
+<div id="leiste">
+  <span class="lb">EBENEN</span>
+  <div id="ebenen"></div>
+  <span class="lb re" id="ebZahl2"></span>
+</div>
+
 <main>
   <div id="kartenfeld">
     <canvas id="karte"></canvas>
@@ -285,12 +301,17 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
       <b>ZIEHEN</b> verschieben · <b>MAUSRAD</b> zoomen ·
       <b>LAND</b> anklicken für Handelsprofil · <b>MARKER</b> für die Meerenge
     </div>
-    <div id="ebenen"></div>
     <div id="statuslegende"></div>
     <div id="auswahl"></div>
   </div>
   <div id="liste"></div>
-  <aside id="panel"></aside>
+  <aside id="panel">
+    <div class="pkopf">
+      <span id="pTitel">AUFKLÄRUNG</span>
+      <button id="pZu" title="Schliessen (Esc)">×</button>
+    </div>
+    <div id="pInhalt"></div>
+  </aside>
 </main>
 
 <div id="quizleiste">
@@ -312,6 +333,8 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
   <div class="f">EBENEN AKTIV: <b id="lgEbenen">2 / 6</b></div>
   <div class="f" title="Tägliche Durchfahrten je Meerenge">LIVE:
     <span id="lgLive"><b style="color:var(--dim)">…</b></span></div>
+  <div class="f" title="Verfolgte X-Konten">MELDUNGEN:
+    <span id="lgFeed"><b style="color:var(--dim)">…</b></span></div>
   <div class="f rechts">QUELLE: OFFEN · BEWERTUNG, KEINE MELDUNG</div>
 </div>
 
