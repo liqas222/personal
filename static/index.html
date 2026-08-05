@@ -45,6 +45,10 @@ nav button.an{color:#04100a;background:var(--phos);border-color:var(--phos);
   font-weight:700;box-shadow:0 0 14px #00e67655}
 header .rechts{margin-left:auto;color:var(--dim);font-size:10px;text-align:right;
   letter-spacing:1px}
+#zahnrad{margin-left:auto;color:var(--dim);text-decoration:none;font-size:16px;
+  padding:2px 8px;border:1px solid transparent;line-height:1}
+#zahnrad:hover{color:var(--phos);border-color:#1f4d3a}
+header .rechts{margin-left:0}
 header .zeit{color:var(--amber);font-size:13px;letter-spacing:2px;font-weight:700}
 
 main{flex:1;display:flex;min-height:0}
@@ -279,6 +283,7 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
     <button data-modus="liste">Meerengen</button>
     <button data-modus="quiz">Drill</button>
   </nav>
+  <a id="zahnrad" href="einstellungen" title="Zugänge und Telegram-Kanäle">⚙</a>
   <div class="rechts">
     <div class="zeit" id="zeit">04 AUG 2026 // 15:51Z</div>
     <span id="stand"></span> · Natural Earth (Public Domain)
