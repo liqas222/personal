@@ -124,6 +124,7 @@ function init() {
   bauEbenen();
   bauStatuslegende();
   malAuswahl();
+  bauFeedPanel();
   document.querySelectorAll("nav button[data-modus]").forEach((b) => {
     b.onclick = () => setModus(b.dataset.modus);
   });
@@ -386,6 +387,7 @@ function zeichne(now) {
     if (AN.ziele) zeichneZiele(now);
     if (AN.callouts) zeichneCallouts();
   }
+  zeichneAlarme(now);
   zeichneFadenkreuz();
 }
 
@@ -525,6 +527,101 @@ function verlaufBlock(engeId) {
     " Nachrichten in " + keys.length + " Wochen</span></div>" +
     '<div class="hz"><span class="hk">Spitze</span><span class="hv">' + max +
     " in der Woche ab " + spitze + "</span></div>";
+}
+
+/* Laufende Einschlagsdarstellungen. Eine neue Drohnen- oder Raketenmeldung
+   soll man sehen, ohne ins Panel zu schauen — deshalb die Animation auf der
+   Karte statt nur einer Zeile im Text. */
+const ALARME = [];
+const GESEHEN = new Set();
+const HEFTIG = ["drohne", "rakete", "explosion", "angriff", "mine"];
+
+function pruefeAlarme() {
+  if (!FEED || !FEED.beitraege) return;
+  let erster = GESEHEN.size === 0;
+  for (const b of FEED.beitraege) {
+    if (GESEHEN.has(b.id)) continue;
+    GESEHEN.add(b.id);
+    // Beim allerersten Abruf nicht die ganze Historie durchspielen.
+    if (erster) continue;
+    const arten = (b.arten || []).filter((a) => HEFTIG.includes(a));
+    if (!arten.length) continue;
+    for (const id of b.engen) {
+      const e = ENGEN.find((x) => x.id === id);
+      if (e) ALARME.push({ p: e.pos, art: arten[0], start: performance.now(),
+                           text: ART_TEXT[arten[0]] || arten[0] });
+    }
+  }
+  while (ALARME.length > 12) ALARME.shift();
+}
+
+/* Ein Einschlag: eine Flugbahn, die aus der Tiefe kommt und auf den Punkt
+   zuläuft, dann Druckwellen-Ringe. Der Höheneindruck entsteht durch den
+   Bogen und seinen Schatten auf der Karte. */
+function zeichneAlarme(now) {
+  for (let i = ALARME.length - 1; i >= 0; i--) {
+    const a = ALARME[i];
+    const t = (now - a.start) / 4200;      // Gesamtdauer der Animation
+    if (t > 1) { ALARME.splice(i, 1); continue; }
+    const [x, y] = view.project(a.p[0], a.p[1]);
+    if (x < -80 || x > W + 80) continue;
+
+    // Phase 1: Anflug
+    if (t < 0.42) {
+      const f = t / 0.42;
+      const w = -Math.PI / 4;
+      const weit = Math.min(W, H) * 0.5;
+      const sx = x + Math.cos(w) * weit, sy = y + Math.sin(w) * weit - 60;
+      const px = sx + (x - sx) * f;
+      const py = sy + (y - sy) * f - Math.sin(Math.PI * f) * 70;
+      ctx.strokeStyle = "rgba(255,45,45,.35)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(px, py);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Schatten auf der Karte gibt dem Bogen seine Höhe
+      const gx = sx + (x - sx) * f, gy = sy + 60 + (y - sy - 60) * f;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.ellipse(gx, gy, 5, 2, 0, 0, 7);
+      ctx.fillStyle = "#000";
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(px, py, 3.5, 0, 7);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+      continue;
+    }
+
+    // Phase 2: Einschlag und Druckwellen
+    const e = (t - 0.42) / 0.58;
+    for (let k = 0; k < 3; k++) {
+      const r = ((e * 1.5 - k * 0.22) % 1);
+      if (r <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(x, y, 6 + r * 55, 0, 7);
+      ctx.strokeStyle = "rgba(255,45,45," + (0.7 * (1 - r)).toFixed(3) + ")";
+      ctx.lineWidth = 2.5 * (1 - r) + 0.5;
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, 5 * (1 - e) + 3, 0, 7);
+    ctx.fillStyle = "#ff2d2d";
+    ctx.fill();
+    ctx.font = '700 10px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#ff8a8a";
+    ctx.globalAlpha = Math.max(0, 1 - e);
+    ctx.letterSpacing = "1.5px";
+    halo(a.text.toUpperCase(), x, y - 16 - e * 14);
+    ctx.letterSpacing = "0px";
+    ctx.globalAlpha = 1;
+  }
 }
 
 const ART_TEXT = {
@@ -1581,6 +1678,7 @@ function malAuswahl() {
       malAuswahl();
     };
   });
+  if (!AUSWAHL.size) bauFeedPanel();
   if (AUSWAHL.size) {
     document.getElementById("pTitel").textContent =
       "HANDELSPROFIL · " + AUSWAHL.size;
@@ -1676,6 +1774,43 @@ function bauStatuslegende() {
       '<div class="z"><i style="background:' + STATUS_FARBEN[k].c +
       ';box-shadow:0 0 7px ' + STATUS_FARBEN[k].c + '"></i>' +
       STATUS_FARBEN[k].t + "</div>").join("");
+}
+
+/* Die Meldungsspalte ist der Normalzustand des rechten Fensters. Erst wenn
+   man ein Land oder eine Enge anwählt, tritt sie zurück. */
+function bauFeedPanel() {
+  if (AUSWAHL.size || (modus === "detail" && aktiv)) return;
+  document.getElementById("pTitel").textContent = "LAGEMELDUNGEN";
+  const el = document.getElementById("pInhalt");
+  if (!FEED || FEED.fehler) {
+    el.innerHTML = '<div class="leerhinweis">' +
+      (!FEED ? "Kein Server-Abruf — Meldungen brauchen serve.py."
+        : FEED.fehler === "nicht eingerichtet"
+          ? 'Noch keine Quelle eingetragen. Oben rechts auf <b>⚙ ZUGÄNGE</b>.'
+          : "Abruf gestört: " + FEED.fehler) + "</div>";
+    return;
+  }
+  const b = FEED.beitraege || [];
+  const ereig = b.filter((x) => (x.arten || []).length);
+  const zeile = (x, alarm) =>
+    '<div class="' + (alarm ? "ereig" : "meld") + '">' +
+    '<div class="' + (alarm ? "ek" : "mk") + '">' +
+    (alarm ? x.arten.map((a) => ART_TEXT[a] || a).join(" · ") : "@" + x.konto) +
+    "<span>" + (x.zeit || "").slice(0, 16).replace("T", " ") + "</span></div>" +
+    '<div class="mt">' + x.text.replace(/[<>&]/g, "") + "</div>" +
+    (x.engen.length ? '<div class="eq">' + x.engen.map((id) => {
+      const e = ENGEN.find((y) => y.id === id);
+      return e ? e.kurz : id;
+    }).join(" · ") + (alarm ? " · @" + x.konto : "") + "</div>" : "") + "</div>";
+  el.innerHTML =
+    '<div class="feedkopf">' + b.length + " Meldungen · " +
+    (ereig.length ? '<b style="color:#ff6b6b">' + ereig.length + " Ereignisse</b>"
+      : "keine Ereignisse") + "</div>" +
+    (ereig.length ? "<h3>Ereignisse</h3>" + ereig.slice(0, 12).map((x) => zeile(x, 1)).join("")
+      : "") +
+    "<h3>Alle Meldungen</h3>" +
+    (b.length ? b.slice(0, 40).map((x) => zeile(x, 0)).join("")
+      : '<div class="leerhinweis">Noch nichts abgerufen.</div>');
 }
 
 /* ---------- Panel und Liste ---------- */

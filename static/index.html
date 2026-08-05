@@ -139,7 +139,7 @@ body[data-modus="quiz"] #leiste{display:none}
 body:not([data-modus="welt"]) #statuslegende{display:none}
 
 /* Auswahlleiste */
-#auswahl{position:absolute;bottom:14px;left:14px;right:290px;display:flex;
+#auswahl{position:absolute;bottom:14px;left:14px;right:14px;display:flex;
   flex-wrap:wrap;align-items:center;gap:6px}
 body[data-auswahl="nein"] #auswahl{display:none}
 #auswahl .tit{color:var(--dim);font-size:10px;letter-spacing:2px;margin-right:4px}
@@ -150,7 +150,7 @@ body[data-auswahl="nein"] #auswahl{display:none}
 #auswahl .chip.leer{border-color:#4a2a2a;color:#ff8a8a}
 body[data-auswahl="ja"] #hinweis{display:none}
 /* Bei Auswahl das Panel auch in der Weltkarte zeigen */
-body[data-modus="welt"][data-auswahl="ja"] #panel{display:block}
+
 
 /* Handelsprofile im Panel */
 .hbox{border-top:1px solid var(--rand);padding-top:14px;margin-top:16px}
@@ -169,6 +169,10 @@ body[data-modus="welt"][data-auswahl="ja"] #panel{display:block}
   background:#060c09;border:1px solid #16302a}
 .sparkf{display:flex;justify-content:space-between;color:var(--dim);
   font-size:9px;margin-bottom:8px}
+.feedkopf{color:var(--dim);font-size:10px;letter-spacing:1.5px;
+  padding-bottom:10px;border-bottom:1px solid var(--rand);margin-bottom:6px}
+.leerhinweis{color:var(--dim);font-size:11.5px;line-height:1.6;padding:14px 0}
+.leerhinweis b{color:var(--phos)}
 .ereig{border-left:3px solid var(--blut);padding:7px 0 7px 11px;margin:9px 0;
   background:#170909}
 .ereig .ek{display:flex;justify-content:space-between;color:#ff8a8a;
@@ -185,7 +189,7 @@ body[data-modus="welt"][data-auswahl="ja"] #panel{display:block}
   color:var(--dim);font-size:10px;line-height:1.5}
 
 /* Seitenpanel */
-#panel{width:410px;flex:none;border-left:2px solid #16302a;background:var(--panel);
+#panel{width:26%;min-width:320px;max-width:480px;flex:none;border-left:2px solid #16302a;background:var(--panel);
   display:flex;flex-direction:column;min-height:0;
   box-shadow:-14px 0 30px #00000066}
 .pkopf{flex:none;display:flex;align-items:center;justify-content:space-between;
@@ -261,7 +265,8 @@ ul.q li{margin-bottom:5px}
   border-radius:6px;cursor:pointer;font:inherit;font-weight:600}
 
 /* Was in welchem Modus sichtbar ist */
-body[data-modus="welt"] #panel,
+/* Die Meldungsspalte bleibt stehen — sie ist der Normalzustand, nicht die
+   Ausnahme. Nur im Listen- und Quizmodus tritt sie zurück. */
 body[data-modus="quiz"] #panel,
 body[data-modus="liste"] #panel{display:none}
 body[data-modus="liste"] #kartenfeld{display:none}
