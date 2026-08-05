@@ -72,7 +72,7 @@ a{color:var(--phos)}
       <b>Kein Bot, kein Token, keine Zugangsdaten nötig.</b></p>
     <p style="color:var(--dim)">Grenzen: nur öffentliche Kanäle, jeweils die
       letzten rund 20 Beiträge. Private Kanäle und Gruppen gehen so nicht —
-      dafür ist Schritt 3 da.</p>
+      dafür ist Schritt 4 da.</p>
     <label for="kan">Kanalnamen, einer pro Zeile (ohne @)</label>
     <textarea id="kan" rows="4" placeholder="kanalname&#10;zweiterkanal"></textarea>
     <button id="saveKan">Speichern und abrufen</button>
@@ -80,7 +80,22 @@ a{color:var(--phos)}
   </section>
 
   <section>
-    <h2>2 · Bot für eigene Gruppen <span style="color:var(--dim)">— optional</span></h2>
+    <h2>2 · Webseiten und Feeds <span style="color:var(--dim)">— empfohlen</span></h2>
+    <p>Beliebige Adressen, die regelmässig Beiträge veröffentlichen. Wird alle
+      zwei Minuten abgerufen.</p>
+    <p><b>Am besten funktioniert ein RSS-Feed</b> — der hat sauberen Text und
+      echte Zeitstempel. Viele Seiten bieten einen an; meist reicht
+      <code>/rss</code>, <code>/feed</code> oder <code>/rss.xml</code> hinter
+      der Adresse. Ist keiner da, wird die Seite als Text durchsucht — das
+      geht auch, ist aber anfällig, wenn die Seite umgebaut wird.</p>
+    <label for="web">Adressen, eine pro Zeile (mit https://)</label>
+    <textarea id="web" rows="4" placeholder="https://beispiel.de/rss&#10;https://andere-seite.com/feed"></textarea>
+    <button id="saveWeb">Speichern und abrufen</button>
+    <div id="webMeldung"></div>
+  </section>
+
+  <section>
+    <h2>3 · Bot für eigene Gruppen <span style="color:var(--dim)">— optional</span></h2>
     <ol>
       <li>In Telegram <b>@BotFather</b> öffnen, <code>/newbot</code> senden.</li>
       <li>Den Token kopieren (Form: <code>123456789:ABCdef…</code>).</li>
@@ -88,7 +103,7 @@ a{color:var(--phos)}
     </ol>
     <p><b>Wichtig:</b> Der Bot sieht nur, wo er selbst Mitglied ist, und nur
       Nachrichten <b>ab dem Beitritt</b>. Alte Beiträge kann er nicht lesen —
-      dafür ist Schritt 3 da. Aus fremden Kanälen leitest du interessante
+      dafür ist Schritt 4 da. Aus fremden Kanälen leitest du interessante
       Nachrichten in deine eigene Gruppe weiter.</p>
     <label for="tok">Bot-Token</label>
     <input id="tok" type="password" placeholder="123456789:ABCdef…" autocomplete="off">
@@ -97,7 +112,7 @@ a{color:var(--phos)}
   </section>
 
   <section>
-    <h2>3 · Verlauf einlesen (alle bisherigen Posts)</h2>
+    <h2>4 · Verlauf einlesen (alle bisherigen Posts)</h2>
     <ol>
       <li><b>Telegram Desktop</b> öffnen, den Kanal auswählen.</li>
       <li>Menü ⋮ → <b>Chatverlauf exportieren</b>.</li>
@@ -127,6 +142,7 @@ async function zustand() {
     $("zust").innerHTML =
       '<span class="zust"><span>Telegram: <b>' +
       (d.telegram ? "eingerichtet" : "nicht eingerichtet") + "</b></span>" +
+      "<span>Webquellen: <b>" + (d.web.length || 0) + "</b></span>" +
       "<span>Kanäle: <b>" + (d.kanaele.length || 0) + "</b></span>" +
       "<span>Verlauf: <b>" + (d.verlauf.gesamt || 0) + " Nachrichten</b>" +
       (d.verlauf.von ? " (" + d.verlauf.von + " bis " + d.verlauf.bis + ")" : "") +
@@ -181,6 +197,26 @@ $("saveKan").onclick = async () => {
     melde("kanMeldung", "Fehler: " + e.message, "err");
   }
   $("saveKan").disabled = false;
+  zustand();
+};
+
+$("saveWeb").onclick = async () => {
+  const liste = $("web").value.split("\n").map((x) => x.trim()).filter(Boolean);
+  $("saveWeb").disabled = true;
+  try {
+    const r = await fetch("api/einstellungen", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ web_quellen: liste }),
+    });
+    const d = await r.json();
+    melde("webMeldung", d.fehler
+      ? "Gespeichert, aber: " + d.fehler
+      : liste.length + " Adresse(n) gespeichert.",
+      d.fehler ? "err" : "ok");
+  } catch (e) {
+    melde("webMeldung", "Fehler: " + e.message, "err");
+  }
+  $("saveWeb").disabled = false;
   zustand();
 };
 

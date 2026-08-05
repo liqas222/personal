@@ -23,6 +23,7 @@ import urllib.parse
 import urllib.request
 from functools import partial
 from html.parser import HTMLParser
+import xml.etree.ElementTree as ET
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -221,6 +222,9 @@ def hole_feed():
     der Bot sitzt. Das ist der praktikable Weg und kostet nichts.
     """
     web, webfehler = hole_kanaele()
+    netz, netzfehler = hole_web()
+    web = web + netz
+    webfehler = "; ".join(x for x in (webfehler, netzfehler) if x) or None
     if not CFG.get("tg_token"):
         # Ohne Bot ist die Web-Vorschau der einzige laufende Kanal.
         if not web:
@@ -482,6 +486,123 @@ def hole_kanaele():
     return raus, ("; ".join(fehler) if fehler else None)
 
 
+# ---------------------------------------------------------------------------
+# Beliebige Webseiten als Quelle.
+#
+# Zuerst wird geprüft, ob die Adresse ein RSS- oder Atom-Feed ist. Feeds sind
+# dafür gemacht: sauberer Text, echte Zeitstempel, stabile Struktur. Nur wenn
+# das nichts hergibt, wird die Seite als HTML durchsucht — das ist immer eine
+# Notlösung, weil sich Seitenaufbauten jederzeit ändern.
+#
+# Viele Seiten, die Beiträge spiegeln, bieten einen Feed an. Meist reicht
+# /rss, /feed oder /rss.xml hinter der Adresse.
+# ---------------------------------------------------------------------------
+
+class TextLeser(HTMLParser):
+    """Sammelt sichtbare Textabschnitte einer Seite."""
+
+    UEBERSPRINGEN = {"script", "style", "nav", "header", "footer", "svg"}
+
+    def __init__(self):
+        HTMLParser.__init__(self)
+        self.stuecke = []
+        self._aus = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.UEBERSPRINGEN:
+            self._aus += 1
+
+    def handle_endtag(self, tag):
+        if tag in self.UEBERSPRINGEN and self._aus:
+            self._aus -= 1
+
+    def handle_data(self, daten):
+        if self._aus:
+            return
+        t = " ".join(daten.split())
+        # Kurze Schnipsel sind Menüpunkte und Knöpfe, keine Beiträge.
+        if len(t) >= 40:
+            self.stuecke.append(t)
+
+
+def _feed_lesen(roh, quelle):
+    """RSS oder Atom auswerten. Gibt None zurück, wenn es keiner ist."""
+    try:
+        wurzel = ET.fromstring(roh)
+    except ET.ParseError:
+        return None
+    ns = {"a": "http://www.w3.org/2005/Atom"}
+    eintraege = wurzel.findall(".//item") or wurzel.findall(".//a:entry", ns)
+    if not eintraege:
+        return None
+    raus = []
+    for e in eintraege[:40]:
+        def hol(*namen):
+            for n in namen:
+                k = e.find(n) if not n.startswith("a:") else e.find(n, ns)
+                if k is not None and (k.text or "").strip():
+                    return " ".join(k.text.split())
+            return ""
+        titel = hol("title", "a:title")
+        text = hol("description", "summary", "a:summary", "a:content")
+        # Beschreibungen enthalten oft HTML — Rohtext daraus ziehen.
+        if "<" in text:
+            leser = TextLeser()
+            leser.feed(text)
+            text = " ".join(leser.stuecke) or text
+        ganz = (titel + " — " + text).strip(" —") if titel else text
+        if not ganz:
+            continue
+        zeit = hol("pubDate", "published", "a:published", "a:updated", "date")
+        raus.append({"id": "web:" + quelle + ":" + (hol("guid", "link", "a:id") or ganz[:40]),
+                     "konto": quelle, "zeit": zeit[:25], "text": ganz[:600],
+                     "engen": zuordnen(ganz)})
+    return raus
+
+
+def hole_web():
+    """Liest alle in web_quellen eingetragenen Adressen."""
+    quellen = CFG.get("web_quellen") or []
+    if not quellen:
+        return [], None
+    raus, fehler = [], []
+    for url in quellen[:15]:
+        url = url.strip()
+        if not url.startswith(("http://", "https://")):
+            fehler.append(url[:40] + ": muss mit http:// oder https:// beginnen")
+            continue
+        name = urllib.parse.urlparse(url).netloc or url
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; atlas/1.0)",
+                "Accept": "application/rss+xml, application/atom+xml, text/html"})
+            with urllib.request.urlopen(req, timeout=25) as r:
+                roh = r.read(4 * 1024 * 1024)
+        except Exception as e:
+            fehler.append("%s: %s" % (name, type(e).__name__))
+            continue
+
+        eintraege = _feed_lesen(roh, name)
+        if eintraege is None:
+            # Kein Feed — Seite als Text durchsuchen.
+            leser = TextLeser()
+            leser.feed(roh.decode("utf-8", "replace"))
+            gesehen, eintraege = set(), []
+            for t in leser.stuecke[:400]:
+                if t in gesehen:
+                    continue
+                gesehen.add(t)
+                engen = zuordnen(t)
+                if engen:
+                    eintraege.append({"id": "web:" + name + ":" + str(hash(t)),
+                                      "konto": name, "zeit": "",
+                                      "text": t[:600], "engen": engen})
+            if not eintraege:
+                fehler.append(name + ": kein Feed und kein Text mit Bezug gefunden")
+        raus.extend(eintraege)
+    return raus, ("; ".join(fehler) if fehler else None)
+
+
 def feed_schleife():
     """Alle zwei Minuten — Telegram kostet nichts."""
     while True:
@@ -520,6 +641,7 @@ class Handler(SimpleHTTPRequestHandler):
                      "/api/zustand": {
                          "telegram": bool(CFG.get("tg_token")),
                          "kanaele": CFG.get("tg_kanaele") or [],
+                         "web": CFG.get("web_quellen") or [],
                          "passwort": bool(CFG.get("auth_token")),
                          "verlauf": {k: VERLAUF[k] for k in
                                      ("gesamt", "von", "bis", "quelle")},
@@ -562,6 +684,9 @@ class Handler(SimpleHTTPRequestHandler):
                 neu["tg_token"] = token
             elif "tg_token" in daten and not token and "tg_kanaele" not in daten:
                 neu["tg_token"] = ""
+            if "web_quellen" in daten:
+                neu["web_quellen"] = [u.strip() for u in
+                                      (daten.get("web_quellen") or []) if u.strip()]
             if "tg_kanaele" in daten:
                 neu["tg_kanaele"] = [k.strip().lstrip("@") for k in
                                      (daten.get("tg_kanaele") or []) if k.strip()]
