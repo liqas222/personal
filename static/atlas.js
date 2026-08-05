@@ -138,10 +138,13 @@ function init() {
   holeLive();
   holeFeed();
   holeVerlauf();
+  holeLage();
   setInterval(holeFeed, 5 * 60 * 1000);
   document.body.dataset.frei = "nein";
   view = makeView(WELT_BBOX, W, H);
-  setModus("welt");
+  // Startbild ist das Lagebild, nicht die Weltkarte: im Mittelpunkt steht,
+  // was in den Kriegen passiert — die Geografie ist der Beleg dazu.
+  setModus("lage");
   requestAnimationFrame(tick);
 }
 
@@ -255,7 +258,11 @@ function setModus(m) {
   // Ohne Neumessung behaelt die Leinwand ihre alte Hoehe und ueberdeckt das,
   // was darunter eingeblendet wird.
   requestAnimationFrame(resize);
-  if (m === "welt") {
+  if (m === "lage") {
+    aktiv = null;
+    bauKacheln();
+    if (!LAGE) holeLage();
+  } else if (m === "welt") {
     aktiv = null;
     fliegeZu(WELT_BBOX);
   } else if (m === "liste") {
@@ -483,7 +490,15 @@ async function holeFeed() {
     feld.title = e.message;
   }
   FEED_VERSUCHT = true;
+  // Nach dem Abruf muss auch das gerendert werden, was den Feed anzeigt.
+  // Fehlte das: das Meldungspanel blieb auf "wird geladen …" stehen, obwohl
+  // die Daten längst da waren.
+  pruefeAlarme();
+  bauEbenen();
   if (aktiv && modus === "detail") bauPanel(aktiv);
+  else if (!AUSWAHL.size) bauFeedPanel();
+  if (modus === "lage") bauKacheln();
+  holeLage();
 }
 
 async function holeVerlauf() {
@@ -805,20 +820,32 @@ function zeichneBahnen(now) {
    selben Ort werden aufgefächert, sonst liegen sie übereinander. */
 function zeichneEreignisse(now) {
   if (!FEED || !FEED.beitraege) return;
-  const proEnge = {};
+  // Gruppiert wird nach ORT, nicht nach Meerenge. Vorher sass ein Angriff
+  // auf Odessa am Bosporus, weil das die einzige Position war, die es gab.
+  const proOrt = {};
+  const merke = (pos, art, b) => {
+    const k = pos[0].toFixed(2) + "," + pos[1].toFixed(2);
+    const g = (proOrt[k] = proOrt[k] || { pos: pos, liste: [] });
+    g.liste.push({ art: art, b: b });
+  };
   for (const b of FEED.beitraege) {
     for (const art of b.arten || []) {
       if (!ART_SYMBOL[art]) continue;
-      for (const id of b.engen) {
-        (proEnge[id] = proEnge[id] || []).push({ art: art, b: b });
+      if (b.ort) {
+        merke(b.ort, art, b);
+        continue;
+      }
+      // Kein erkannter Ort — dann wenigstens an der genannten Meerenge.
+      for (const id of b.engen || []) {
+        const e = ENGEN.find((x) => x.id === id);
+        if (e) merke(e.pos, art, b);
       }
     }
   }
   const puls = 0.72 + 0.28 * Math.sin(now / 480);
-  for (const [id, liste] of Object.entries(proEnge)) {
-    const e = ENGEN.find((x) => x.id === id);
-    if (!e) continue;
-    const [mx, my] = view.project(e.pos[0], e.pos[1]);
+  for (const gruppe of Object.values(proOrt)) {
+    const liste = gruppe.liste;
+    const [mx, my] = view.project(gruppe.pos[0], gruppe.pos[1]);
     if (mx < -60 || mx > W + 60) continue;
     // Nur die jüngsten sechs, sonst wird der Ort unlesbar.
     const zeigen = liste.slice(0, 6);
@@ -2065,6 +2092,176 @@ function bauFeedPanel() {
     "<h3>Alle Meldungen</h3>" +
     (b.length ? b.slice(0, 40).map((x) => zeile(x, 0)).join("")
       : '<div class="leerhinweis">Noch nichts abgerufen.</div>');
+}
+
+/* ---------- Lagebild: eine Kachel je Kriegsschauplatz ----------
+
+   Das Startbild. Wer die Seite aufmacht, soll ohne einen Klick sehen, wo
+   gerade etwas passiert — und in Worten, nicht in Symbolen.
+
+   Wichtige Einschränkung, die im UI auch dransteht: gezählt werden
+   MELDUNGEN, nicht Ereignisse in der Welt. Zwei Kanäle, die denselben
+   Angriff berichten, ergeben zwei Meldungen. Der Wert taugt für den
+   Vergleich mit dem Vortag — nicht als Angabe darüber, wie viel wirklich
+   geschehen ist. Alles andere wäre eine erfundene Zahl. */
+
+let LAGE = null;
+
+async function holeLage() {
+  try {
+    const r = await fetch("api/lage", { cache: "no-store" });
+    if (r.ok) LAGE = await r.json();
+  } catch (e) { LAGE = null; }
+  if (modus === "lage") bauKacheln();
+}
+
+/* Status aus den Zahlen ableiten — nie von Hand setzen. Ein handgesetzter
+   Status veraltet unbemerkt; genau das war bei Hormuz schon der Fall. */
+function lageStatus(k) {
+  if (!k || !k.n24) return { s: "still", t: "keine Meldungen in 24 h" };
+  if (k.n24 >= 5 && k.n24 >= 2 * Math.max(k.n48, 1))
+    return { s: "rot", t: "deutlich mehr als am Vortag" };
+  if (k.n24 > k.n48) return { s: "amber", t: "mehr als am Vortag" };
+  if (k.n24 < k.n48) return { s: "gruen", t: "weniger als am Vortag" };
+  return { s: "gruen", t: "wie am Vortag" };
+}
+
+function vorZeit(iso) {
+  if (!iso) return "Zeit unbekannt";
+  const t = Date.parse(iso + (/[Zz+]/.test(iso) ? "" : "Z"));
+  if (isNaN(t)) return "Zeit unbekannt";
+  const min = Math.round((Date.now() - t) / 60000);
+  if (min < 2) return "gerade eben";
+  if (min < 60) return "vor " + min + " Min.";
+  if (min < 48 * 60) return "vor " + Math.round(min / 60) + " Std.";
+  return "vor " + Math.round(min / 1440) + " Tagen";
+}
+
+/* Der eine Satz, der die Kachel erklärt. */
+function lageSatz(k) {
+  if (!k || !k.gesamt) return "Bisher keine Meldung zu diesem Schauplatz.";
+  const arten = Object.entries(k.arten || {}).sort((a, b) => b[1] - a[1]);
+  const teile = [];
+  teile.push(k.n24 + " " + (k.n24 === 1 ? "Meldung" : "Meldungen") +
+    " in 24 Std." + (k.n48 ? " (Vortag: " + k.n48 + ")" : ""));
+  if (arten.length)
+    teile.push("vor allem " +
+      arten.slice(0, 2).map((a) => (ART_TEXT[a[0]] || a[0]).toLowerCase())
+        .join(" und "));
+  if (k.letzte) teile.push("zuletzt " + vorZeit(k.letzte));
+  return teile.join(" · ") + ".";
+}
+
+function bauKacheln() {
+  const el = document.getElementById("kacheln");
+  if (!el) return;
+  const proId = {};
+  ((LAGE || {}).kacheln || []).forEach((k) => { proId[k.id] = k; });
+
+  if (!LAGE) {
+    el.innerHTML = '<div class="leerhinweis">Lagebild wird geladen … ' +
+      "Kommt hier nichts an, läuft die Seite nicht über <b>serve.py</b>.</div>";
+    return;
+  }
+  // Reihenfolge: was am meisten los ist, steht vorn. Leere Schauplätze
+  // bleiben trotzdem sichtbar — "hier ist nichts gemeldet" ist auch eine
+  // Aussage, und ein verschwundener Schauplatz wäre irreführend.
+  const sortiert = SCHAUPLAETZE.slice().sort((a, b) =>
+    ((proId[b.id] || {}).n24 || 0) - ((proId[a.id] || {}).n24 || 0));
+
+  const kopf = '<div class="lagekopf">' +
+    "<b>LAGEBILD</b> · Stand " +
+    ((LAGE.stand || "").replace("T", " ") || "?") + " UTC · " +
+    (LAGE.meldungen || 0) + " Meldungen ausgewertet" +
+    (LAGE.fehler ? ' · <span class="warn">Quelle gestört: ' +
+      String(LAGE.fehler).replace(/[<>&]/g, "").slice(0, 120) + "</span>" : "") +
+    (LAGE.ohne_zeit ? ' · <span class="warn">' + LAGE.ohne_zeit +
+      " ohne Zeitstempel (nicht im 24-Std-Fenster)</span>" : "") +
+    '<div class="lagenote">Gezählt werden <b>Meldungen</b>, nicht Ereignisse. ' +
+    "Zwei Kanäle über denselben Angriff ergeben zwei Meldungen. " +
+    "Der Vergleich mit dem Vortag ist belastbar, die absolute Zahl nicht. " +
+    "Alle Meldungen sind <b>ungeprüft</b>.</div></div>";
+
+  const kacheln = sortiert.map((s) => {
+    const k = proId[s.id];
+    const st = lageStatus(k);
+    const bsp = ((k || {}).beispiele || []).map((b) =>
+      '<div class="kb"><span class="kba">' +
+      (b.arten || []).map((a) => ART_TEXT[a] || a).join(" · ") + "</span>" +
+      (b.ortname ? '<span class="kbo">' + b.ortname + "</span>" : "") +
+      '<span class="kbz">' + vorZeit(b.zeit) + "</span>" +
+      '<div class="kbt">' + String(b.text).replace(/[<>&]/g, "") + "</div></div>"
+    ).join("") || '<div class="kbleer">Keine Ereignismeldung.</div>';
+
+    const engen = (s.engen || []).map((id) => {
+      const e = ENGEN.find((y) => y.id === id);
+      return e ? e.kurz || e.name : id;
+    });
+
+    return '<button class="kachel" data-sp="' + s.id + '">' +
+      '<div class="kk"><span class="led ' + st.s + '"></span>' +
+      '<span class="kn">' + s.name + "</span>" +
+      '<span class="kz">' + ((k || {}).n24 || 0) + "</span></div>" +
+      '<div class="ks">' + lageSatz(k) + "</div>" +
+      '<div class="kt">' + st.t + "</div>" +
+      '<div class="kbs">' + bsp + "</div>" +
+      (engen.length ? '<div class="ke">Betrifft: ' + engen.join(" · ") +
+        "</div>" : "") + "</button>";
+  }).join("");
+
+  const legende = '<div class="symlegende"><b>Zeichen auf der Karte</b>' +
+    Object.keys(ART_TEXT).map((a) =>
+      '<span class="sl"><canvas width="26" height="26" data-art="' + a +
+      '"></canvas>' + ART_TEXT[a] + "</span>").join("") + "</div>";
+
+  el.innerHTML = kopf + '<div class="kachelgitter">' + kacheln + "</div>" + legende;
+
+  el.querySelectorAll(".kachel").forEach((b) => {
+    b.onclick = () => zeigeSchauplatz(b.dataset.sp);
+  });
+  // Die Legende zeichnet dieselben Symbole wie die Karte — aus derselben
+  // Funktion, damit sie nicht auseinanderlaufen können.
+  el.querySelectorAll(".symlegende canvas").forEach((c) => {
+    const g = c.getContext("2d");
+    g.translate(13, 13);
+    g.strokeStyle = "#ff8a8a";
+    g.fillStyle = "#ff8a8a";
+    g.lineWidth = 1.4;
+    g.lineCap = "round";
+    if (ART_SYMBOL[c.dataset.art]) ART_SYMBOL[c.dataset.art](g);
+  });
+}
+
+/* Klick auf eine Kachel: Karte auf den Schauplatz, Panel mit Erklärung
+   und allen Meldungen dazu. */
+function zeigeSchauplatz(id) {
+  const s = SCHAUPLATZ_NACH_ID[id];
+  if (!s) return;
+  aktiv = null;
+  AUSWAHL.clear();
+  setModus("welt");
+  fliegeZu(s.bbox);
+  document.getElementById("pTitel").textContent = s.name.toUpperCase();
+  const b = ((FEED || {}).beitraege || []).filter(
+    (x) => (x.schauplatz || "sonstige") === id);
+  const zeile = (x) =>
+    '<div class="' + ((x.arten || []).length ? "ereig" : "meld") + '">' +
+    '<div class="' + ((x.arten || []).length ? "ek" : "mk") + '">' +
+    ((x.arten || []).length
+      ? x.arten.map((a) => ART_TEXT[a] || a).join(" · ")
+      : "@" + x.konto) +
+    "<span>" + vorZeit(x.zeit) + "</span></div>" +
+    (x.ortname ? '<div class="eq">' + x.ortname + "</div>" : "") +
+    '<div class="mt">' + String(x.text).replace(/[<>&]/g, "") + "</div>" +
+    '<div class="eq">@' + x.konto + " · ungeprüft</div></div>";
+  document.getElementById("pInhalt").innerHTML =
+    '<div class="worum"><b>Worum geht es hier</b><p>' + s.worum + "</p></div>" +
+    '<div class="feedkopf">' + b.length + " Meldungen zu diesem Schauplatz" +
+    "</div>" +
+    (b.length ? b.slice(0, 60).map(zeile).join("")
+      : '<div class="leerhinweis">Keine Meldung zugeordnet. Das heisst ' +
+        "nicht, dass nichts passiert — nur, dass die eingetragenen Quellen " +
+        "nichts dazu geliefert haben.</div>");
 }
 
 /* ---------- Panel und Liste ---------- */

@@ -134,6 +134,16 @@ a{color:var(--phos)}
     <div id="impMeldung"></div>
   </section>
 
+  <section>
+    <h2>Prüfen — was sieht der Server?</h2>
+    <p>Ruft jede eingetragene Quelle einmal ab und sagt, was ankommt.
+      Nützlich, wenn keine Meldungen erscheinen: dann liegt es entweder an
+      der Erreichbarkeit, am Seitenaufbau oder schlicht daran, dass nichts
+      zum Thema drinsteht — das sind drei verschiedene Probleme.</p>
+    <button id="pruef">Quellen jetzt prüfen</button>
+    <div id="pruefMeldung"></div>
+  </section>
+
   <a class="zurueck" href="./">← zurück zur Lagekarte</a>
 </div>
 
@@ -261,6 +271,31 @@ async function lies(datei) {
   }
   zustand();
 }
+
+$("pruef").onclick = async () => {
+  $("pruef").disabled = true;
+  melde("pruefMeldung", "Quellen werden abgerufen …", "ok");
+  try {
+    const r = await fetch("api/pruefen", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: "{}" });
+    const d = await r.json();
+    if (!d.berichte || !d.berichte.length) {
+      melde("pruefMeldung", "Keine Quellen eingetragen.", "err");
+    } else {
+      $("pruefMeldung").innerHTML = d.berichte.map((b) => {
+        const gut = /Beiträge gelesen|Einträge/.test(b.ergebnis || "");
+        return '<div class="' + (gut ? "ok" : "err") + '"><b>' +
+          b.art + ": " + b.quelle + "</b><br>" +
+          (b.status ? "HTTP " + b.status + " · " : "") + b.ergebnis +
+          (b.beispiel ? '<br><span style="color:var(--dim)">Beispiel: ' +
+            b.beispiel.replace(/[<>&]/g, "") + "</span>" : "") + "</div>";
+      }).join("");
+    }
+  } catch (e) {
+    melde("pruefMeldung", "Fehler: " + e.message, "err");
+  }
+  $("pruef").disabled = false;
+};
 
 zustand();
 </script>

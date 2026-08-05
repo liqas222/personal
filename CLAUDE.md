@@ -65,6 +65,32 @@ Siehe `README.md` für Aufbau und Bedienung.
   Seite ausserhalb des eigenen Bildschirms missverständlich.
 - Beim Zoomen die Theaterflächen dämpfen, sonst überdecken sie die Karte.
 
+## Meldungen und Kriegsschauplätze
+
+- **Nie an der Meerenge filtern.** Der Feed liess früher nur Texte durch, in
+  denen wörtlich eine Meerenge vorkam (`zuordnen(text) != []`). Damit fiel jede
+  Kriegsmeldung durch — ein Angriff auf Kiew nennt keine Meerenge. Genau daran
+  lag „gibt noch keine meldungen". Jetzt entscheidet `meldenswert()`:
+  Ereignisart **oder** Meerenge.
+- **Ein Ort, nicht eine Enge.** Ereignisse werden dort gezeichnet, wo sie
+  passiert sind (`b.ort` aus `ort_treffer()`), Enge nur als Rückfall. Vorher
+  sass ein Angriff auf Odessa am Bosporus.
+- **Ortsnamen brauchen Wortgrenzen.** Ohne `\b` steckt „mali" in „Somalia" und
+  „oman" in „Roman". Gilt für `ORTE`, `VON_WORTE` und `NACH_WORTE`.
+- **Zeitangaben vereinheitlichen.** RSS liefert RFC-822, Atom ISO, die
+  Telegram-Vorschau etwas Drittes. Ungemischt sortiert nichts und ein
+  24-Stunden-Fenster lässt sich gar nicht erst bilden — `zeit_normieren()`.
+- **Alle Quellenpfade durch `anreichern()`.** Bot, Kanalvorschau, RSS und HTML
+  haben das früher je für sich gemacht; der Bot-Pfad hat `arten` und `bahn`
+  schlicht vergessen und seine Meldungen waren auf der Karte unsichtbar.
+- **Die Kacheln zählen Meldungen, nicht Ereignisse.** Zwei Kanäle über denselben
+  Angriff ergeben zwei Meldungen. Der Vergleich mit dem Vortag ist belastbar,
+  die absolute Zahl nicht — und das steht im UI auch so da.
+- **Der Kachelstatus folgt den Zahlen** (`lageStatus()`), nie von Hand gesetzt.
+- **Wer den Server hier lokal testet**, braucht `NO_PROXY=127.0.0.1` und muss
+  wissen, dass der erste `hole_feed()`-Lauf startet, bevor der eigene Socket
+  lauscht — eine Stub-Quelle auf demselben Server geht im ersten Zyklus leer aus.
+
 ## Handel und Abhängigkeit
 
 - Inhalte in `static/handel.js`. **Keine erfundenen Zahlen.** Warenstruktur

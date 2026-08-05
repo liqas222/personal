@@ -268,12 +268,64 @@ ul.q li{margin-bottom:5px}
 /* Die Meldungsspalte bleibt stehen — sie ist der Normalzustand, nicht die
    Ausnahme. Nur im Listen- und Quizmodus tritt sie zurück. */
 body[data-modus="quiz"] #panel,
-body[data-modus="liste"] #panel{display:none}
-body[data-modus="liste"] #kartenfeld{display:none}
+body[data-modus="liste"] #panel,
+body[data-modus="lage"] #panel{display:none}
+body[data-modus="liste"] #kartenfeld,
+body[data-modus="lage"] #kartenfeld{display:none}
 body[data-modus="liste"] #liste{display:grid;flex:1}
+body[data-modus="lage"] #kacheln{display:block;flex:1}
+body[data-modus="lage"] #leiste{display:none}
 body[data-modus="quiz"] #quizleiste{display:flex}
 body:not([data-modus="detail"]) #zurueck{display:none}
 body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none}
+
+/* Lagebild — Kachel je Kriegsschauplatz. Das Startbild. */
+#kacheln{display:none;overflow-y:auto;padding:14px 16px 24px}
+.lagekopf{border-bottom:1px solid var(--rand);padding-bottom:8px;
+  margin-bottom:14px;color:var(--ink2);font-size:11px;letter-spacing:.06em}
+.lagekopf b{color:var(--phos)}
+.lagekopf .warn{color:var(--amber)}
+.lagenote{margin-top:6px;color:var(--dim);letter-spacing:0;line-height:1.6;
+  max-width:78ch;text-transform:none}
+.lagenote b{color:var(--ink2)}
+.kachelgitter{display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+.kachel{text-align:left;background:var(--panel);border:1px solid var(--rand);
+  border-radius:8px;padding:12px 13px;color:var(--ink);font:inherit;
+  cursor:pointer;display:flex;flex-direction:column;gap:8px}
+.kachel:hover{border-color:var(--phos);background:#0c141b}
+.kk{display:flex;align-items:center;gap:8px}
+.kn{font-weight:700;font-size:12.5px;flex:1}
+.kz{font-size:19px;font-weight:700;color:var(--ink2);line-height:1}
+.led{width:9px;height:9px;border-radius:50%;flex:none}
+.led.rot{background:var(--blut);box-shadow:0 0 8px var(--blut)}
+.led.amber{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.led.gruen{background:var(--phos);box-shadow:0 0 8px var(--phos)}
+.led.still{background:#2b3a40}
+.ks{color:var(--ink2);font-size:11.5px;line-height:1.6}
+.kt{color:var(--dim);font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.08em}
+.kbs{display:flex;flex-direction:column;gap:6px;
+  border-top:1px solid var(--rand);padding-top:8px}
+.kb{font-size:11px;line-height:1.5}
+.kba{color:#ff8a8a;font-weight:700}
+.kbo{color:var(--amber);margin-left:6px;text-transform:capitalize}
+.kbz{color:var(--dim);margin-left:6px}
+.kbt{color:var(--ink2);opacity:.8;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden}
+.kbleer{color:var(--dim);font-size:11px}
+.ke{color:var(--dim);font-size:10.5px;border-top:1px solid var(--rand);
+  padding-top:7px}
+.symlegende{margin-top:18px;padding-top:12px;border-top:1px solid var(--rand);
+  color:var(--ink2);font-size:11px;display:flex;flex-wrap:wrap;
+  align-items:center;gap:14px}
+.symlegende b{color:var(--dim);letter-spacing:.08em;width:100%}
+.sl{display:flex;align-items:center;gap:4px}
+.worum{background:#0c141b;border:1px solid var(--rand);border-radius:6px;
+  padding:10px 11px;margin-bottom:12px;font-size:11.5px;line-height:1.65}
+.worum b{color:var(--phos);letter-spacing:.06em}
+.worum p{margin:6px 0 0;color:var(--ink2)}
 
 @media (max-width:900px){
   #panel{position:absolute;inset:auto 0 0 0;width:auto;height:52%;
@@ -282,7 +334,7 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 }
 </style>
 </head>
-<body data-modus="welt">
+<body data-modus="lage">
 
 <div class="klass">
   <span>GEHEIM // REL USA, GBR, AUS, CAN, NZL // NOFORN</span>
@@ -292,7 +344,8 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 <header>
   <div class="logo"><b>◈</b> ATLAS // JOC</div>
   <nav>
-    <button data-modus="welt" class="an">Lagekarte</button>
+    <button data-modus="lage" class="an">Lagebild</button>
+    <button data-modus="welt">Lagekarte</button>
     <button data-modus="liste">Meerengen</button>
     <button data-modus="quiz">Drill</button>
   </nav>
@@ -326,6 +379,7 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
     <div id="statuslegende"></div>
     <div id="auswahl"></div>
   </div>
+  <div id="kacheln"></div>
   <div id="liste"></div>
   <aside id="panel">
     <div class="pkopf">
@@ -370,6 +424,7 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 <script src="data.js"></script>
 <script src="lagen.js"></script>
 <script src="handel.js"></script>
+<script src="schauplaetze.js"></script>
 <script src="atlas.js"></script>
 </body>
 </html>

@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 node_modules/
 data/live.json
+data/feed.json
+data/verlauf.json
