@@ -465,8 +465,10 @@ async function holeFeed() {
         (d.fehler === "nicht eingerichtet" ? "NICHT EINGERICHTET" : "FEHLER") + "</b>";
       feld.title = d.fehler;
     } else {
-      feld.innerHTML = '<b style="color:var(--phos)">' + d.beitraege.length +
-        " · " + d.konten.length + " KONTEN</b>";
+      const ereig = d.beitraege.filter((b) => (b.arten || []).length).length;
+      feld.innerHTML = '<b style="color:' + (ereig ? "var(--blut)" : "var(--phos)") +
+        '">' + (ereig ? ereig + " EREIGNISSE · " : "") + d.beitraege.length +
+        " MELDUNGEN</b>";
       feld.title = "Stand " + (d.stand || "?");
     }
   } catch (e) {
@@ -523,6 +525,28 @@ function verlaufBlock(engeId) {
     " Nachrichten in " + keys.length + " Wochen</span></div>" +
     '<div class="hz"><span class="hk">Spitze</span><span class="hv">' + max +
     " in der Woche ab " + spitze + "</span></div>";
+}
+
+const ART_TEXT = {
+  drohne: "Drohne", rakete: "Rakete", explosion: "Explosion",
+  angriff: "Angriff", mine: "Mine", aufbringung: "Schiff aufgebracht",
+  sperrung: "Sperrung", brand: "Brand",
+};
+
+/* Ereignisse zu dieser Enge — das, wonach man tatsächlich Ausschau hält.
+   Steht vor den übrigen Meldungen, damit man es nicht suchen muss. */
+function ereignisBlock(engeId) {
+  if (!FEED || FEED.fehler) return "";
+  const tr = (FEED.beitraege || []).filter(
+    (b) => b.engen.includes(engeId) && (b.arten || []).length);
+  if (!tr.length) return "";
+  return '<h3 style="color:#ff6b6b">Ereignisse <span class="tag">ungeprüft</span></h3>' +
+    tr.slice(0, 6).map((b) =>
+      '<div class="ereig"><div class="ek">' +
+      (b.arten.map((a) => ART_TEXT[a] || a).join(" · ")) +
+      "<span>" + (b.zeit || "").slice(0, 16).replace("T", " ") + "</span></div>" +
+      '<div class="mt">' + b.text.replace(/[<>&]/g, "") + "</div>" +
+      '<div class="eq">@' + b.konto + "</div></div>").join("");
 }
 
 /* Meldungen zu genau dieser Meerenge, als Block fürs Panel. */
@@ -1702,6 +1726,7 @@ function bauPanel(e) {
     "<h3>Warum sie zählt</h3><p>" + e.warum + "</p>" +
     "<h3>Was man wissen sollte</h3><p>" + e.detail + "</p>" +
     '<h3>Lage <span class="tag">veraltet schnell</span></h3><p>' + e.lage + "</p>" +
+    ereignisBlock(e.id) +
     verlaufBlock(e.id) +
     meldungsBlock(e.id) +
     "<h3>Gibt es einen Umweg?</h3><p>" + e.umweg + "</p>" +

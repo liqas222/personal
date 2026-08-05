@@ -193,11 +193,14 @@ const CALLOUTS = [
 
 /* ---------- Ebenen-Register ---------- */
 
+/* Alle Ebenen starten AUS. Die Karte soll leer beginnen und nur zeigen, was
+   man bewusst dazuschaltet — vorbelegte Filter sieht man nicht und wundert
+   sich dann über das Bild. */
 const EBENEN = [
-  { id: "konflikte", t: "AKTUELLE KONFLIKTE", an: true, farbe: "#ff2d2d" },
+  { id: "konflikte", t: "AKTUELLE KONFLIKTE", an: false, farbe: "#ff2d2d" },
   { id: "ziele", t: "MILITÄRISCHE ZIELE", an: false, farbe: "#ff3b30" },
   { id: "kontrolle", t: "KONTROLLE / BLOCKADE", an: false, farbe: "#c04cff" },
-  { id: "status", t: "CHOKEPOINT-STATUS", an: true, farbe: "#00e676" },
+  { id: "status", t: "CHOKEPOINT-STATUS", an: false, farbe: "#00e676" },
   { id: "vektoren", t: "KRAFTVEKTOREN", an: false, farbe: "#ffb000" },
   { id: "callouts", t: "INTEL-CALLOUTS", an: false, farbe: "#00e676" },
 ];

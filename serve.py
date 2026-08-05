@@ -195,6 +195,30 @@ TG_STICH = {
                   "danish strait", "shadow fleet", "schattenflotte"],
 }
 
+# Ereignisarten. Wonach man tatsächlich Ausschau hält: nicht "wurde die Enge
+# erwähnt", sondern "ist dort etwas passiert". Bewusst grobe Stichworte —
+# lieber ein Treffer zu viel, den man selbst verwirft, als einer zu wenig.
+EREIGNIS_ARTEN = {
+    "drohne": ["drone", "drohne", "uav", "usv", "unmanned", "shahed", "kamikaze"],
+    "rakete": ["missile", "rakete", "ballistic", "cruise missile", "anti-ship"],
+    "explosion": ["explosion", "blast", "detonat", "anschlag", "bomb",
+                  "ied", "struck", "hit by"],
+    "angriff": ["attack", "angriff", "attacked", "assault", "strike", "airstrike"],
+    "mine": ["naval mine", "seemine", "mine laid", "mining"],
+    "aufbringung": ["seized", "seizure", "boarded", "beschlagnahm",
+                    "aufgebracht", "hijack", "detained vessel"],
+    "sperrung": ["blockade", "closed", "gesperrt", "shut down", "suspend"],
+    "brand": ["fire on board", "ablaze", "brand", "burning vessel"],
+}
+
+
+def ereignisarten(text):
+    """Welche Ereignisarten kommen im Text vor?"""
+    t = text.lower()
+    return [art for art, worte in EREIGNIS_ARTEN.items()
+            if any(w in t for w in worte)]
+
+
 FEED = {"stand": None, "beitraege": [], "konten": [],
         "fehler": "nicht eingerichtet"}
 FEED_CACHE = os.path.join(BASE, "data", "feed.json")
@@ -381,7 +405,8 @@ def export_einlesen(roh):
                 beispiele.append({"id": "exp:" + str(m.get("id")),
                                   "konto": VERLAUF["quelle"],
                                   "zeit": str(m.get("date") or "")[:16],
-                                  "text": text[:600], "engen": engen})
+                                  "text": text[:600], "engen": engen,
+                                  "arten": ereignisarten(text)})
     verlauf_speichern()
     # Die jüngsten Treffer aus dem Verlauf wandern in die Anzeige.
     beispiele.sort(key=lambda b: b["zeit"], reverse=True)
@@ -507,7 +532,8 @@ def hole_kanaele():
                          "konto": "@" + name,
                          "zeit": b["zeit"] or "",
                          "text": b["text"][:600],
-                         "engen": zuordnen(b["text"])})
+                         "engen": zuordnen(b["text"]),
+                         "arten": ereignisarten(b["text"])})
     return raus, ("; ".join(fehler) if fehler else None)
 
 
@@ -581,7 +607,7 @@ def _feed_lesen(roh, quelle):
         zeit = hol("pubDate", "published", "a:published", "a:updated", "date")
         raus.append({"id": "web:" + quelle + ":" + (hol("guid", "link", "a:id") or ganz[:40]),
                      "konto": quelle, "zeit": zeit[:25], "text": ganz[:600],
-                     "engen": zuordnen(ganz)})
+                     "engen": zuordnen(ganz), "arten": ereignisarten(ganz)})
     return raus
 
 
@@ -621,7 +647,8 @@ def hole_web():
                 if engen:
                     eintraege.append({"id": "web:" + name + ":" + str(hash(t)),
                                       "konto": name, "zeit": "",
-                                      "text": t[:600], "engen": engen})
+                                      "text": t[:600], "engen": engen,
+                                      "arten": ereignisarten(t)})
             if not eintraege:
                 fehler.append(name + ": kein Feed und kein Text mit Bezug gefunden")
         raus.extend(eintraege)
