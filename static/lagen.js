@@ -203,4 +203,5 @@ const EBENEN = [
   { id: "status", t: "CHOKEPOINT-STATUS", an: false, farbe: "#00e676" },
   { id: "vektoren", t: "KRAFTVEKTOREN", an: false, farbe: "#ffb000" },
   { id: "callouts", t: "INTEL-CALLOUTS", an: false, farbe: "#00e676" },
+  { id: "ereignisse", t: "EREIGNISSE", an: true, farbe: "#ff2d2d" },
 ];

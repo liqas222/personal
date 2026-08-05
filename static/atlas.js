@@ -387,6 +387,7 @@ function zeichne(now) {
     if (AN.ziele) zeichneZiele(now);
     if (AN.callouts) zeichneCallouts();
   }
+  if (AN.ereignisse) zeichneEreignisse(now);
   zeichneAlarme(now);
   zeichneFadenkreuz();
 }
@@ -621,6 +622,174 @@ function zeichneAlarme(now) {
     halo(a.text.toUpperCase(), x, y - 16 - e * 14);
     ctx.letterSpacing = "0px";
     ctx.globalAlpha = 1;
+  }
+}
+
+/* Symbole der Ereignisarten. Handgezeichnet, weil eine Bilddatei den
+   Grundsatz "eine Datei, keine Abhängigkeiten" bräche — und weil sich
+   Strichzeichnungen sauber in jeder Grösse zeichnen lassen. */
+const ART_SYMBOL = {
+  // Quadrokopter von oben: vier Ausleger mit Rotoren, Rumpf in der Mitte
+  drohne: (c) => {
+    for (const [x, y] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      c.beginPath();
+      c.moveTo(0, 0);
+      c.lineTo(x * 5, y * 5);
+      c.stroke();
+      c.beginPath();
+      c.arc(x * 6.5, y * 6.5, 2.6, 0, 7);
+      c.stroke();
+    }
+    c.beginPath();
+    c.rect(-2, -2, 4, 4);
+    c.fill();
+  },
+  // Rakete im Anflug: Spitze, Rumpf, Leitwerk, Abgasfahne
+  rakete: (c) => {
+    c.beginPath();
+    c.moveTo(0, -8);
+    c.lineTo(2.6, -2);
+    c.lineTo(2.6, 4);
+    c.lineTo(-2.6, 4);
+    c.lineTo(-2.6, -2);
+    c.closePath();
+    c.fill();
+    c.beginPath();
+    c.moveTo(-2.6, 2); c.lineTo(-5.5, 6); c.lineTo(-2.6, 5);
+    c.moveTo(2.6, 2); c.lineTo(5.5, 6); c.lineTo(2.6, 5);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(0, 5); c.lineTo(0, 9);
+    c.stroke();
+  },
+  // Explosion: Zackenstern
+  explosion: (c) => {
+    c.beginPath();
+    for (let i = 0; i < 12; i++) {
+      const w = (i / 12) * Math.PI * 2;
+      const r = i % 2 ? 3.4 : 8.5;
+      i ? c.lineTo(Math.cos(w) * r, Math.sin(w) * r)
+        : c.moveTo(Math.cos(w) * r, Math.sin(w) * r);
+    }
+    c.closePath();
+    c.fill();
+  },
+  // Angriff: gekreuzte Klingen
+  angriff: (c) => {
+    c.beginPath();
+    c.moveTo(-6, -6); c.lineTo(6, 6);
+    c.moveTo(6, -6); c.lineTo(-6, 6);
+    c.lineWidth = 2.2;
+    c.stroke();
+  },
+  // Seemine: Kugel mit Zündhörnern
+  mine: (c) => {
+    c.beginPath();
+    c.arc(0, 0, 4.2, 0, 7);
+    c.fill();
+    for (let i = 0; i < 8; i++) {
+      const w = (i / 8) * Math.PI * 2;
+      c.beginPath();
+      c.moveTo(Math.cos(w) * 4.2, Math.sin(w) * 4.2);
+      c.lineTo(Math.cos(w) * 8, Math.sin(w) * 8);
+      c.stroke();
+    }
+  },
+  // Aufgebrachtes Schiff: Rumpf mit Haken darüber
+  aufbringung: (c) => {
+    c.beginPath();
+    c.moveTo(-7, 2); c.lineTo(7, 2); c.lineTo(4.5, 6); c.lineTo(-4.5, 6);
+    c.closePath();
+    c.fill();
+    c.beginPath();
+    c.moveTo(0, -8); c.lineTo(0, -2);
+    c.arc(0, -2, 2.6, -Math.PI / 2, Math.PI, true);
+    c.stroke();
+  },
+  // Sperrung: Schlagbaum
+  sperrung: (c) => {
+    c.beginPath();
+    c.moveTo(-8, 0); c.lineTo(8, 0);
+    c.lineWidth = 3;
+    c.stroke();
+    c.beginPath();
+    c.moveTo(-8, -4); c.lineTo(-8, 5);
+    c.moveTo(8, -4); c.lineTo(8, 5);
+    c.lineWidth = 1.6;
+    c.stroke();
+  },
+  // Brand: Flamme
+  brand: (c) => {
+    c.beginPath();
+    c.moveTo(0, -9);
+    c.bezierCurveTo(5, -4, 6, 1, 2.5, 5);
+    c.bezierCurveTo(1, 6.5, -1, 6.5, -2.5, 5);
+    c.bezierCurveTo(-6, 1, -4, -3, 0, -9);
+    c.closePath();
+    c.fill();
+  },
+};
+
+/* Alle bekannten Ereignisse als Symbole an ihrer Meerenge. Mehrere am
+   selben Ort werden aufgefächert, sonst liegen sie übereinander. */
+function zeichneEreignisse(now) {
+  if (!FEED || !FEED.beitraege) return;
+  const proEnge = {};
+  for (const b of FEED.beitraege) {
+    for (const art of b.arten || []) {
+      if (!ART_SYMBOL[art]) continue;
+      for (const id of b.engen) {
+        (proEnge[id] = proEnge[id] || []).push({ art: art, b: b });
+      }
+    }
+  }
+  const puls = 0.72 + 0.28 * Math.sin(now / 480);
+  for (const [id, liste] of Object.entries(proEnge)) {
+    const e = ENGEN.find((x) => x.id === id);
+    if (!e) continue;
+    const [mx, my] = view.project(e.pos[0], e.pos[1]);
+    if (mx < -60 || mx > W + 60) continue;
+    // Nur die jüngsten sechs, sonst wird der Ort unlesbar.
+    const zeigen = liste.slice(0, 6);
+    zeigen.forEach((z, i) => {
+      // Halbkreis oberhalb des Markers auffächern.
+      const w = -Math.PI / 2 + (i - (zeigen.length - 1) / 2) * 0.52;
+      const r = 30;
+      const x = mx + Math.cos(w) * r, y = my + Math.sin(w) * r;
+      ctx.save();
+      ctx.translate(x, y);
+      // Verbindungslinie zum Ort
+      ctx.strokeStyle = "rgba(255,45,45,.3)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(mx - x, my - y);
+      ctx.stroke();
+      // Scheibe als Hintergrund, damit das Symbol auf der Karte lesbar ist
+      ctx.beginPath();
+      ctx.arc(0, 0, 11, 0, 7);
+      ctx.fillStyle = "rgba(8,4,4,.88)";
+      ctx.fill();
+      ctx.strokeStyle = "#ff2d2d";
+      ctx.lineWidth = 1.4;
+      ctx.globalAlpha = i === 0 ? puls : 0.75;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#ff8a8a";
+      ctx.fillStyle = "#ff8a8a";
+      ctx.lineWidth = 1.4;
+      ctx.lineCap = "round";
+      ART_SYMBOL[z.art](ctx);
+      ctx.restore();
+    });
+    // Anzahl, wenn mehr da sind als gezeigt
+    if (liste.length > zeigen.length) {
+      ctx.font = '700 9px ui-monospace,Menlo,Consolas,monospace';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#ff8a8a";
+      halo("+" + (liste.length - zeigen.length), mx + 34, my - 30);
+    }
   }
 }
 
@@ -1725,6 +1894,12 @@ function bauHandelPanel() {
 /* Wie viele Objekte eine Ebene beisteuert — steht im Schalter, damit man
    vorher weiss, was man sich auf die Karte holt. */
 function ebenenAnzahl(id) {
+  // Die Ereignisse kommen aus dem laufenden Abruf, nicht aus einer Datei —
+  // ihre Zahl steht erst fest, wenn Meldungen da sind.
+  if (id === "ereignisse") {
+    return FEED && FEED.beitraege
+      ? FEED.beitraege.filter((b) => (b.arten || []).length).length : 0;
+  }
   return { konflikte: KONFLIKTE.length, ziele: ZIELE.length,
            kontrolle: KONTROLLZONEN.length, status: Object.keys(STATUS).length,
            vektoren: VEKTOREN.length, callouts: CALLOUTS.length }[id];
