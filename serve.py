@@ -901,13 +901,80 @@ def _feed_lesen(roh, quelle):
     return raus
 
 
+# ---------------------------------------------------------------------------
+# Standardquellen.
+#
+# Wer den Monitor aufmacht, soll etwas sehen, ohne erst Adressen zu suchen.
+# Ausgewählt nach einem Kriterium: berichtet die Quelle laufend und mit
+# Ortsangabe über Kampfhandlungen? Nachrichtenagenturen für die Breite,
+# Regionalquellen für die Tiefe, Schifffahrtsdienste für die Meerengen.
+#
+# EHRLICHE EINSCHRÄNKUNG: Diese Adressen sind nach Aufbau und Betreiber
+# gewählt, aber von hier aus nicht abrufbar — die Sandbox kommt nicht ins
+# offene Netz. Ob ein Feed heute noch existiert, sagt erst der Prüfknopf auf
+# der Einstellungsseite. Tote Feeds werden dort namentlich gemeldet, statt
+# stillschweigend nichts zu liefern.
+#
+# Es sind Nachrichtenquellen, keine Aufklärung: sie berichten, was
+# veröffentlicht wurde. Mehrere Quellen über dasselbe Ereignis ergeben
+# mehrere Meldungen — deshalb zählen die Kacheln Meldungen, nicht Ereignisse.
+# ---------------------------------------------------------------------------
+
+STANDARD_QUELLEN = [
+    # Breite Abdeckung, alle Schauplätze
+    ["https://www.aljazeera.com/xml/rss/all.xml",
+     "Al Jazeera — dichteste Berichterstattung aus Nahost"],
+    ["https://feeds.bbci.co.uk/news/world/rss.xml",
+     "BBC World — Agenturbreite, verlässliche Zeitstempel"],
+    ["https://moxie.foxnews.com/google-publisher/world.xml",
+     "Fox News World"],
+    # Nahost
+    ["https://www.timesofisrael.com/feed/",
+     "Times of Israel — israelische Sicht, meldet Abschüsse und Einschläge"],
+    ["https://www.middleeasteye.net/rss",
+     "Middle East Eye — Gegengewicht zur israelischen Sicht"],
+    ["https://english.alarabiya.net/tools/rss",
+     "Al Arabiya — Golfstaaten"],
+    # Ukraine
+    ["https://kyivindependent.com/feed/",
+     "Kyiv Independent — ukrainische Lage, englisch"],
+    ["https://www.understandingwar.org/rss.xml",
+     "ISW — tägliche Lagebeurteilung Ukraine und Iran"],
+    # Militär und Rüstung, alle Schauplätze
+    ["https://www.twz.com/feed",
+     "The War Zone — Waffensysteme, Verlegungen, Satellitenbilder"],
+    ["https://www.navalnews.com/feed/",
+     "Naval News — Flottenbewegungen"],
+    # Schifffahrt: der Teil, der die Meerengen betrifft
+    ["https://gcaptain.com/feed/",
+     "gCaptain — Zwischenfälle in der Handelsschifffahrt"],
+    ["https://maritime-executive.com/articles/rss",
+     "Maritime Executive — Aufbringungen, Minen, Sperrungen"],
+]
+
+
+def web_quellen():
+    """Die tatsächlich abzurufenden Adressen.
+
+    Ohne eigene Eintragung laufen die Standardquellen. Sonst stünde der
+    Monitor beim ersten Start leer da und man müsste erst Adressen suchen,
+    um zu sehen, ob er überhaupt etwas tut.
+    """
+    eigene = [u.strip() for u in (CFG.get("web_quellen") or []) if u.strip()]
+    if eigene:
+        return eigene
+    if CFG.get("standard_quellen") is False:
+        return []
+    return [u for u, _ in STANDARD_QUELLEN]
+
+
 def hole_web():
     """Liest alle in web_quellen eingetragenen Adressen."""
-    quellen = CFG.get("web_quellen") or []
+    quellen = web_quellen()
     if not quellen:
         return [], None
     raus, fehler = [], []
-    for url in quellen[:15]:
+    for url in quellen[:25]:
         url = url.strip()
         if not url.startswith(("http://", "https://")):
             fehler.append(url[:40] + ": muss mit http:// oder https:// beginnen")
@@ -987,7 +1054,7 @@ def quellen_pruefen():
             b["beispiel"] = leser.beitraege[0]["text"][:180]
         berichte.append(b)
 
-    for url in (CFG.get("web_quellen") or []):
+    for url in web_quellen():
         b = {"quelle": url, "art": "Webseite"}
         try:
             req = urllib.request.Request(url, headers={
@@ -1066,6 +1133,10 @@ class Handler(SimpleHTTPRequestHandler):
                          "telegram": bool(CFG.get("tg_token")),
                          "kanaele": CFG.get("tg_kanaele") or [],
                          "web": CFG.get("web_quellen") or [],
+                         "standard": [{"url": u, "warum": w}
+                                      for u, w in STANDARD_QUELLEN],
+                         "standard_aktiv":
+                             web_quellen() == [u for u, _ in STANDARD_QUELLEN],
                          "passwort": bool(CFG.get("auth_token")),
                          "verlauf": {k: VERLAUF[k] for k in
                                      ("gesamt", "von", "bis", "quelle")},

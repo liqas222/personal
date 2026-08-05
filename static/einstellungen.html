@@ -36,6 +36,20 @@ button{background:#0d2318;border:1px solid var(--phos);color:var(--phos);
   margin-top:12px}
 button:hover{background:#143623}
 button[disabled]{opacity:.5;cursor:default}
+button.zweit{background:#111a1f;border-color:var(--rand);color:var(--ink2);
+  margin-left:8px}
+button.zweit:hover{background:#16232a;border-color:var(--ink2)}
+.quellenliste{border:1px solid var(--rand);border-radius:6px;overflow:hidden;
+  margin:10px 0 18px}
+.qzeile{display:flex;gap:10px;align-items:baseline;padding:5px 9px;
+  border-bottom:1px solid #101a20;font-size:11.5px}
+.qzeile:last-child{border-bottom:0}
+.qzeile code{color:var(--ink2);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;flex:0 1 46%}
+.qzeile span{color:var(--dim);flex:1}
+.qkopf{background:#0c141b;color:var(--dim)}
+.qkopf b.an{color:var(--phos)}
+.qkopf b.aus{color:var(--dim)}
 .warn{border-left:3px solid var(--amber);background:#1a1405;padding:10px 13px;
   color:#f0d9a0;font-size:11.5px;margin-bottom:14px}
 .err{border-left:3px solid var(--blut);background:#1a0808;color:#f4bcbc;
@@ -92,9 +106,20 @@ a{color:var(--phos)}
       <code>/rss</code>, <code>/feed</code> oder <code>/rss.xml</code> hinter
       der Adresse. Ist keiner da, wird die Seite als Text durchsucht — das
       geht auch, ist aber anfällig, wenn die Seite umgebaut wird.</p>
+    <h3>Standardquellen</h3>
+    <p>Solange hier unten nichts eingetragen ist, laufen diese Quellen —
+      ausgewählt danach, ob sie laufend und mit Ortsangabe über
+      Kampfhandlungen berichten. Sobald du eigene Adressen einträgst,
+      ersetzen sie diese Liste vollständig.</p>
+    <p><b>Ungeprüft:</b> ob ein Feed heute noch existiert, sagt dir der
+      Prüfknopf ganz unten. Tote Feeds werden dort namentlich gemeldet.</p>
+    <div id="standard" class="quellenliste"></div>
+
+    <h3>Eigene Adressen</h3>
     <label for="web">Adressen, eine pro Zeile (mit https://)</label>
     <textarea id="web" rows="4" placeholder="https://beispiel.de/rss&#10;https://andere-seite.com/feed"></textarea>
     <button id="saveWeb">Speichern und abrufen</button>
+    <button id="uebernehmen" class="zweit">Standardquellen als eigene übernehmen</button>
     <div id="webMeldung"></div>
   </section>
 
@@ -162,6 +187,15 @@ async function zustand() {
       (d.verlauf.von ? " (" + d.verlauf.von + " bis " + d.verlauf.bis + ")" : "") +
       "</span></span>";
     $("schutzwarnung").hidden = !!d.passwort;
+    // Standardquellen anzeigen und kenntlich machen, ob sie gerade laufen.
+    $("standard").innerHTML =
+      '<div class="qzeile qkopf">' + (d.standard_aktiv
+        ? '<b class="an">AKTIV</b> — diese Quellen laufen gerade'
+        : '<b class="aus">INAKTIV</b> — deine eigenen Adressen unten ' +
+          "ersetzen sie") + "</div>" +
+      (d.standard || []).map((q) =>
+        '<div class="qzeile"><code>' + q.url + "</code><span>" +
+        q.warum + "</span></div>").join("");
   } catch (e) {
     $("zust").textContent = "Server nicht erreichbar: " + e.message;
   }
@@ -232,6 +266,19 @@ $("saveWeb").onclick = async () => {
   }
   $("saveWeb").disabled = false;
   zustand();
+};
+
+/* Standardliste in das Eingabefeld holen, damit man einzelne Quellen
+   streichen oder ergänzen kann, statt alles selbst zu tippen. */
+$("uebernehmen").onclick = async () => {
+  try {
+    const d = await (await fetch("api/zustand", { cache: "no-store" })).json();
+    $("web").value = (d.standard || []).map((q) => q.url).join("\n");
+    melde("webMeldung", "Liste übernommen — jetzt bearbeiten und speichern.",
+      "ok");
+  } catch (e) {
+    melde("webMeldung", "Fehler: " + e.message, "err");
+  }
 };
 
 $("drop").onclick = () => $("datei").click();

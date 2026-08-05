@@ -142,9 +142,9 @@ function init() {
   setInterval(holeFeed, 5 * 60 * 1000);
   document.body.dataset.frei = "nein";
   view = makeView(WELT_BBOX, W, H);
-  // Startbild ist das Lagebild, nicht die Weltkarte: im Mittelpunkt steht,
-  // was in den Kriegen passiert — die Geografie ist der Beleg dazu.
-  setModus("lage");
+  // Startbild ist die Karte. Die Lage steht daneben im Panel — beides auf
+  // einen Blick, ohne einen Klick.
+  setModus("welt");
   requestAnimationFrame(tick);
 }
 
@@ -2073,6 +2073,10 @@ function bauFeedPanel() {
   }
   const b = FEED.beitraege || [];
   const ereig = b.filter((x) => (x.arten || []).length);
+  // Kurzlage über den Meldungen: eine Zeile je Kriegsschauplatz, sortiert
+  // nach Betrieb. Damit steht beim Start die Karte im Bild UND daneben,
+  // was gerade wo passiert — ohne einen Klick.
+  const kurz = lageKurz();
   const zeile = (x, alarm) =>
     '<div class="' + (alarm ? "ereig" : "meld") + '">' +
     '<div class="' + (alarm ? "ek" : "mk") + '">' +
@@ -2083,7 +2087,7 @@ function bauFeedPanel() {
       const e = ENGEN.find((y) => y.id === id);
       return e ? e.kurz : id;
     }).join(" · ") + (alarm ? " · @" + x.konto : "") + "</div>" : "") + "</div>";
-  el.innerHTML =
+  el.innerHTML = kurz +
     '<div class="feedkopf">' + b.length + " Meldungen · " +
     (ereig.length ? '<b style="color:#ff6b6b">' + ereig.length + " Ereignisse</b>"
       : "keine Ereignisse") + "</div>" +
@@ -2092,6 +2096,7 @@ function bauFeedPanel() {
     "<h3>Alle Meldungen</h3>" +
     (b.length ? b.slice(0, 40).map((x) => zeile(x, 0)).join("")
       : '<div class="leerhinweis">Noch nichts abgerufen.</div>');
+  kurzlageKlicks();
 }
 
 /* ---------- Lagebild: eine Kachel je Kriegsschauplatz ----------
@@ -2113,6 +2118,7 @@ async function holeLage() {
     if (r.ok) LAGE = await r.json();
   } catch (e) { LAGE = null; }
   if (modus === "lage") bauKacheln();
+  else if (!AUSWAHL.size && modus !== "detail") bauFeedPanel();
 }
 
 /* Status aus den Zahlen ableiten — nie von Hand setzen. Ein handgesetzter
@@ -2150,6 +2156,38 @@ function lageSatz(k) {
         .join(" und "));
   if (k.letzte) teile.push("zuletzt " + vorZeit(k.letzte));
   return teile.join(" · ") + ".";
+}
+
+/* Kurzfassung des Lagebilds für die Spalte neben der Karte: eine Zeile je
+   Schauplatz, an dem etwas läuft. Klick springt auf die Karte. */
+function lageKurz() {
+  if (!LAGE || !LAGE.kacheln) return "";
+  const mit = LAGE.kacheln.filter((k) => k.n24 > 0 || k.gesamt > 0);
+  if (!mit.length) return "";
+  return '<div class="kurzlage"><div class="klk">LAGE — LETZTE 24 STD.</div>' +
+    mit.slice(0, 6).map((k) => {
+      const s = SCHAUPLATZ_NACH_ID[k.id] || { name: k.id };
+      const st = lageStatus(k);
+      const arten = Object.entries(k.arten || {}).sort((a, b) => b[1] - a[1]);
+      return '<button class="klz" data-sp="' + k.id + '">' +
+        '<span class="led ' + st.s + '"></span>' +
+        '<span class="kln">' + s.name.split(" — ")[0] + "</span>" +
+        '<span class="kla">' +
+        (arten.length
+          ? arten.slice(0, 2).map((a) => ART_TEXT[a[0]] || a[0]).join(", ")
+          : (k.letzte ? vorZeit(k.letzte) : "—")) + "</span>" +
+        '<span class="klc">' + k.n24 + "</span></button>";
+    }).join("") +
+    '<div class="klf">Meldungen, keine Ereigniszählung · alle ungeprüft · ' +
+    "Klick zoomt die Karte</div></div>";
+}
+
+/* Die Klicks der Kurzlage anhängen — das Panel wird als HTML gebaut, die
+   Knöpfe brauchen ihre Handler danach. */
+function kurzlageKlicks() {
+  document.querySelectorAll("#pInhalt .klz").forEach((b) => {
+    b.onclick = () => zeigeSchauplatz(b.dataset.sp);
+  });
 }
 
 function bauKacheln() {

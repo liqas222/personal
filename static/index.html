@@ -279,7 +279,22 @@ body[data-modus="quiz"] #quizleiste{display:flex}
 body:not([data-modus="detail"]) #zurueck{display:none}
 body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none}
 
-/* Lagebild — Kachel je Kriegsschauplatz. Das Startbild. */
+/* Kurzlage in der Meldungsspalte — steht beim Start neben der Karte. */
+.kurzlage{border:1px solid var(--rand);border-radius:6px;margin-bottom:12px;
+  overflow:hidden}
+.klk{background:#0c141b;padding:5px 9px;color:var(--dim);font-size:10px;
+  letter-spacing:.1em;border-bottom:1px solid var(--rand)}
+.klz{display:flex;align-items:center;gap:7px;width:100%;text-align:left;
+  background:none;border:0;border-bottom:1px solid #101a20;padding:6px 9px;
+  color:var(--ink);font:inherit;font-size:11px;cursor:pointer}
+.klz:hover{background:#0e1820}
+.kln{font-weight:700;white-space:nowrap}
+.kla{flex:1;color:var(--dim);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.klc{font-weight:700;color:var(--ink2)}
+.klf{padding:5px 9px;color:var(--dim);font-size:10px;line-height:1.5}
+
+/* Lagebild — Kachel je Kriegsschauplatz. */
 #kacheln{display:none;overflow-y:auto;padding:14px 16px 24px}
 .lagekopf{border-bottom:1px solid var(--rand);padding-bottom:8px;
   margin-bottom:14px;color:var(--ink2);font-size:11px;letter-spacing:.06em}
@@ -334,7 +349,7 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 }
 </style>
 </head>
-<body data-modus="lage">
+<body data-modus="welt">
 
 <div class="klass">
   <span>GEHEIM // REL USA, GBR, AUS, CAN, NZL // NOFORN</span>
@@ -344,8 +359,8 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 <header>
   <div class="logo"><b>◈</b> ATLAS // JOC</div>
   <nav>
-    <button data-modus="lage" class="an">Lagebild</button>
-    <button data-modus="welt">Lagekarte</button>
+    <button data-modus="welt" class="an">Lagekarte</button>
+    <button data-modus="lage">Lagebild</button>
     <button data-modus="liste">Meerengen</button>
     <button data-modus="quiz">Drill</button>
   </nav>

@@ -87,6 +87,16 @@ Siehe `README.md` für Aufbau und Bedienung.
   Angriff ergeben zwei Meldungen. Der Vergleich mit dem Vortag ist belastbar,
   die absolute Zahl nicht — und das steht im UI auch so da.
 - **Der Kachelstatus folgt den Zahlen** (`lageStatus()`), nie von Hand gesetzt.
+- **Startbild ist die Karte**, die Kurzlage steht daneben im Panel. Das
+  Kachel-Lagebild ist ein eigener Modus, nicht der Einstieg.
+- **Standardquellen laufen, solange nichts Eigenes eingetragen ist**
+  (`web_quellen()`). Sonst steht der Monitor beim ersten Start leer da und man
+  weiss nicht, ob er überhaupt etwas tut. Eigene Adressen ersetzen die Liste
+  vollständig — kein Mischen, das wäre nicht durchschaubar.
+- **Die Standardquellen sind ungeprüft** und als solche gekennzeichnet. Aus
+  dieser Sandbox ist das offene Netz nicht erreichbar; ob ein Feed noch lebt,
+  sagt nur der Prüfknopf auf dem Zielrechner. Tote Feeds müssen dort
+  namentlich gemeldet werden, nie stillschweigend nichts liefern.
 - **Wer den Server hier lokal testet**, braucht `NO_PROXY=127.0.0.1` und muss
   wissen, dass der erste `hole_feed()`-Lauf startet, bevor der eigene Socket
   lauscht — eine Stub-Quelle auf demselben Server geht im ersten Zyklus leer aus.
