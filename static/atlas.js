@@ -387,7 +387,7 @@ function zeichne(now) {
     if (AN.ziele) zeichneZiele(now);
     if (AN.callouts) zeichneCallouts();
   }
-  if (AN.ereignisse) zeichneEreignisse(now);
+  if (AN.ereignisse) { zeichneBahnen(now); zeichneEreignisse(now); }
   zeichneAlarme(now);
   zeichneFadenkreuz();
 }
@@ -733,6 +733,73 @@ const ART_SYMBOL = {
     c.fill();
   },
 };
+
+/* Flugbahnen: nur wenn Start UND Ziel im Text standen. Fehlt eines, wird
+   keine Linie gezeichnet — eine erfundene Richtung wäre schlimmer als keine. */
+function zeichneBahnen(now) {
+  if (!FEED || !FEED.beitraege) return;
+  let k = 0;
+  for (const b of FEED.beitraege) {
+    const bahn = b.bahn || [];
+    const von = bahn[0], nach = bahn[1];
+    if (!von || !nach || !(b.arten || []).length) continue;
+    const geo = grosskreis(von, nach, 40);
+    const pts = geo.map((p) => view.project(p[0], p[1]));
+    const d = Math.hypot(pts[pts.length - 1][0] - pts[0][0],
+                         pts[pts.length - 1][1] - pts[0][1]);
+    const hoehe = Math.min(d * 0.28, H * 0.3);
+    const bogen = pts.map((p, i) => {
+      const t = i / (pts.length - 1);
+      return [p[0], p[1] - Math.sin(Math.PI * t) * hoehe];
+    });
+    const pfad = (arr) => {
+      ctx.beginPath();
+      ctx.moveTo(arr[0][0], arr[0][1]);
+      for (let i = 1; i < arr.length; i++) ctx.lineTo(arr[i][0], arr[i][1]);
+    };
+    // Bodenspur zeigt, worüber die Bahn läuft
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.setLineDash([3, 5]);
+    ctx.strokeStyle = "#ff2d2d";
+    ctx.lineWidth = 1;
+    pfad(pts);
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = "rgba(255,45,45,.75)";
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([10, 7]);
+    ctx.lineDashOffset = -(now / 38) % 17;
+    pfad(bogen);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Symbol der Waffenart wandert die Bahn entlang
+    const t = ((now / 5200) + (k++ * 0.19)) % 1;
+    const i = Math.min(bogen.length - 2, Math.floor(t * (bogen.length - 1)));
+    const [x, y] = bogen[i];
+    const w = Math.atan2(bogen[i + 1][1] - y, bogen[i + 1][0] - x);
+    const art = b.arten.find((a) => ART_SYMBOL[a]) || "rakete";
+    ctx.save();
+    ctx.translate(x, y);
+    // Raketen und Drohnen zeigen in Flugrichtung; die Symbole sind nach
+    // oben gezeichnet, deshalb eine Vierteldrehung dazu.
+    ctx.rotate(w + Math.PI / 2);
+    ctx.scale(0.8, 0.8);
+    ctx.strokeStyle = "#ffb3b3";
+    ctx.fillStyle = "#ffb3b3";
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = "round";
+    ART_SYMBOL[art](ctx);
+    ctx.restore();
+    // Zielmarkierung
+    const z = pts[pts.length - 1];
+    ctx.beginPath();
+    ctx.arc(z[0], z[1], 5 + 2 * Math.sin(now / 300), 0, 7);
+    ctx.strokeStyle = "#ff2d2d";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+}
 
 /* Alle bekannten Ereignisse als Symbole an ihrer Meerenge. Mehrere am
    selben Ort werden aufgefächert, sonst liegen sie übereinander. */

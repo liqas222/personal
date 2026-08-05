@@ -212,6 +212,65 @@ EREIGNIS_ARTEN = {
 }
 
 
+# Orte, die in Meldungen vorkommen und die man verorten kann. Bewusst
+# überschaubar: lieber wenige sichere Treffer als viele falsche.
+ORTE = {
+    "yemen": [45.0, 15.5], "jemen": [45.0, 15.5],
+    "houthi": [44.2, 15.3], "huthi": [44.2, 15.3],
+    "hodeidah": [42.95, 14.80], "hudaydah": [42.95, 14.80],
+    "iran": [53.0, 32.0], "bandar abbas": [56.28, 27.18],
+    "qeshm": [55.90, 26.85], "kharg": [50.33, 29.25],
+    "israel": [34.9, 31.5], "eilat": [34.95, 29.55],
+    "saudi": [45.0, 24.0], "riyadh": [46.7, 24.7],
+    "uae": [54.4, 24.3], "dubai": [55.3, 25.2], "fujairah": [56.33, 25.13],
+    "qatar": [51.2, 25.3], "kuwait": [47.9, 29.3], "iraq": [43.7, 33.2],
+    "oman": [57.0, 21.5], "bahrain": [50.55, 26.07],
+    "red sea": [38.5, 20.0], "rotes meer": [38.5, 20.0],
+    "gulf of aden": [47.0, 12.5], "golf von aden": [47.0, 12.5],
+    "persian gulf": [51.5, 27.0], "persischer golf": [51.5, 27.0],
+    "suez": [32.45, 30.6], "port said": [32.3, 31.26],
+    "black sea": [34.0, 43.5], "schwarzes meer": [34.0, 43.5],
+    "crimea": [34.2, 45.2], "krim": [34.2, 45.2],
+    "sevastopol": [33.53, 44.62], "odesa": [30.7, 46.5], "odessa": [30.7, 46.5],
+    "ukraine": [31.5, 49.0], "russia": [40.0, 55.0], "russland": [40.0, 55.0],
+    "taiwan": [121.0, 23.7], "china": [104.0, 35.0],
+    "baltic": [19.0, 57.0], "ostsee": [19.0, 57.0],
+}
+
+# Wörter, die auf Herkunft bzw. Ziel hindeuten.
+VON_WORTE = ["from", "aus", "von", "launched from", "fired from", "abgefeuert aus"]
+NACH_WORTE = ["toward", "towards", "at", "on", "against", "auf", "gegen",
+              "richtung", "in the direction of", "struck", "hit"]
+
+
+def _enthaelt(text, worte):
+    return any(re.search(r"\b" + re.escape(w) + r"\b", text) for w in worte)
+
+
+def orte_finden(text):
+    """Liefert (start, ziel) als Koordinaten, soweit erkennbar.
+
+    Sehr einfach gehalten: Es wird geschaut, welches Wort vor einem Ortsnamen
+    steht. Steht dort 'from', ist es die Herkunft; steht dort 'toward' oder
+    'on', ist es das Ziel. Findet sich nur eines von beidem, bleibt das andere
+    offen — dann wird keine Linie gezeichnet, statt etwas zu erfinden.
+    """
+    t = text.lower()
+    von = nach = None
+    for name, pos in ORTE.items():
+        i = t.find(name)
+        if i < 0:
+            continue
+        davor = t[max(0, i - 22):i]
+        # Wortgrenzen sind hier zwingend: "on" steckt in "drone", "at" in
+        # "attack. Ohne \b hielt die Suche den Absender fuer das Ziel.
+        if _enthaelt(davor, NACH_WORTE) and not nach:
+            nach = pos
+        elif _enthaelt(davor, VON_WORTE) and not von:
+            von = pos
+    return von, nach
+
+
 def ereignisarten(text):
     """Welche Ereignisarten kommen im Text vor?"""
     t = text.lower()
@@ -406,7 +465,8 @@ def export_einlesen(roh):
                                   "konto": VERLAUF["quelle"],
                                   "zeit": str(m.get("date") or "")[:16],
                                   "text": text[:600], "engen": engen,
-                                  "arten": ereignisarten(text)})
+                                  "arten": ereignisarten(text),
+                     "bahn": orte_finden(text)})
     verlauf_speichern()
     # Die jüngsten Treffer aus dem Verlauf wandern in die Anzeige.
     beispiele.sort(key=lambda b: b["zeit"], reverse=True)
@@ -533,7 +593,8 @@ def hole_kanaele():
                          "zeit": b["zeit"] or "",
                          "text": b["text"][:600],
                          "engen": zuordnen(b["text"]),
-                         "arten": ereignisarten(b["text"])})
+                         "arten": ereignisarten(b["text"]),
+                     "bahn": orte_finden(b["text"])})
     return raus, ("; ".join(fehler) if fehler else None)
 
 
@@ -607,7 +668,8 @@ def _feed_lesen(roh, quelle):
         zeit = hol("pubDate", "published", "a:published", "a:updated", "date")
         raus.append({"id": "web:" + quelle + ":" + (hol("guid", "link", "a:id") or ganz[:40]),
                      "konto": quelle, "zeit": zeit[:25], "text": ganz[:600],
-                     "engen": zuordnen(ganz), "arten": ereignisarten(ganz)})
+                     "engen": zuordnen(ganz), "arten": ereignisarten(ganz),
+                     "bahn": orte_finden(ganz)})
     return raus
 
 
@@ -648,7 +710,8 @@ def hole_web():
                     eintraege.append({"id": "web:" + name + ":" + str(hash(t)),
                                       "konto": name, "zeit": "",
                                       "text": t[:600], "engen": engen,
-                                      "arten": ereignisarten(t)})
+                                      "arten": ereignisarten(t),
+                     "bahn": orte_finden(t)})
             if not eintraege:
                 fehler.append(name + ": kein Feed und kein Text mit Bezug gefunden")
         raus.extend(eintraege)
