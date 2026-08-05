@@ -452,16 +452,41 @@ class VorschauLeser(HTMLParser):
             self._puffer.append(daten)
 
 
+def kanalname(eingabe):
+    """Holt den Kanalnamen aus allem, was man üblicherweise einfügt.
+
+    Erlaubt sind der blosse Name, @Name, ein t.me-Link und Adressen von
+    Statistikseiten wie tgstat. Der angezeigte Titel eines Kanals ist dagegen
+    kein Name — der hat Leerzeichen und taugt nicht als Adresse.
+    """
+    t = (eingabe or "").strip()
+    if not t:
+        return None
+    # Aus einer Adresse das letzte Wegstück nehmen.
+    if "/" in t:
+        teile = [x for x in t.split("?")[0].rstrip("/").split("/") if x]
+        # Links auf einen einzelnen Beitrag enden mit dessen Nummer —
+        # dann ist der Kanalname das Stück davor.
+        while teile and (teile[-1].isdigit() or teile[-1] == "s"):
+            teile.pop()
+        t = teile[-1] if teile else ""
+    t = t.lstrip("@")
+    return t if re.match(r"^[A-Za-z0-9_]{3,40}$", t) else None
+
+
 def hole_kanaele():
     """Liest alle in tg_kanaele eingetragenen öffentlichen Kanäle."""
     kanaele = CFG.get("tg_kanaele") or []
     if not kanaele:
         return [], None
     raus, fehler = [], []
-    for name in kanaele[:15]:
-        name = name.strip().lstrip("@")
-        if not re.match(r"^[A-Za-z0-9_]{3,40}$", name):
-            fehler.append(name + ": ungültiger Kanalname")
+    for eingabe in kanaele[:15]:
+        name = kanalname(eingabe)
+        if not name:
+            fehler.append("Kanal „%s“: daraus kann ich keinen Kanalnamen "
+                          "lesen. Erwartet wird der @Name oder ein Link wie "
+                          "t.me/name — nicht der angezeigte Titel."
+                          % eingabe.strip()[:40])
             continue
         try:
             url = CFG.get("tg_vorschau_url", "https://t.me/s/") + name
@@ -698,7 +723,10 @@ class Handler(SimpleHTTPRequestHandler):
             os.replace(tmp, pfad_cfg)
             CFG.clear()
             CFG.update(neu)
-            ok = hole_feed() if token else False
+            # Immer neu abrufen, nicht nur bei gesetztem Bot-Token — sonst
+            # zeigt die Rückmeldung einen Fehler vom letzten Durchlauf und
+            # nicht das Ergebnis dessen, was gerade gespeichert wurde.
+            ok = hole_feed()
             return self._antwort({"ok": True, "abruf": ok,
                                   "fehler": FEED.get("fehler")})
 

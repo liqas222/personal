@@ -73,8 +73,12 @@ a{color:var(--phos)}
     <p style="color:var(--dim)">Grenzen: nur öffentliche Kanäle, jeweils die
       letzten rund 20 Beiträge. Private Kanäle und Gruppen gehen so nicht —
       dafür ist Schritt 4 da.</p>
-    <label for="kan">Kanalnamen, einer pro Zeile (ohne @)</label>
-    <textarea id="kan" rows="4" placeholder="kanalname&#10;zweiterkanal"></textarea>
+    <p style="color:var(--dim)">Du kannst den <code>@Namen</code>, einen
+      <code>t.me</code>-Link oder eine tgstat-Adresse einfügen — der Name wird
+      herausgelesen. <b>Nicht</b> der angezeigte Titel des Kanals: der hat
+      Leerzeichen und ist keine Adresse.</p>
+    <label for="kan">Kanäle, einer pro Zeile</label>
+    <textarea id="kan" rows="4" placeholder="@Middle_East_Spectator&#10;https://t.me/anderer_kanal"></textarea>
     <button id="saveKan">Speichern und abrufen</button>
     <div id="kanMeldung"></div>
   </section>
