@@ -399,6 +399,8 @@ function zeichne(now) {
    keinen Server — dann bleibt es schlicht aus, statt Fehler zu werfen. */
 let LIVE = null;
 let FEED = null;
+let FEED_VERSUCHT = false;   // erst nach dem ersten Abruf etwas behaupten
+let FEED_FEHLER = null;
 let VERLAUF = null;
 
 async function holeLive() {
@@ -476,9 +478,11 @@ async function holeFeed() {
     }
   } catch (e) {
     FEED = null;
+    FEED_FEHLER = e.message;
     feld.innerHTML = '<b style="color:var(--dim)">AUS</b>';
     feld.title = e.message;
   }
+  FEED_VERSUCHT = true;
   if (aktiv && modus === "detail") bauPanel(aktiv);
 }
 
@@ -1957,9 +1961,17 @@ function bauFeedPanel() {
   if (AUSWAHL.size || (modus === "detail" && aktiv)) return;
   document.getElementById("pTitel").textContent = "LAGEMELDUNGEN";
   const el = document.getElementById("pInhalt");
+  if (!FEED_VERSUCHT) {
+    el.innerHTML = '<div class="leerhinweis">Meldungen werden geladen …</div>';
+    return;
+  }
   if (!FEED || FEED.fehler) {
     el.innerHTML = '<div class="leerhinweis">' +
-      (!FEED ? "Kein Server-Abruf — Meldungen brauchen serve.py."
+      (!FEED ? "Der Abruf von <code>api/feed</code> ist fehlgeschlagen: " +
+        (FEED_FEHLER || "unbekannt") +
+        "<br><br>Läuft die Seite über <b>serve.py</b>? Prüfen mit " +
+        "<code>curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/api/feed</code> " +
+        "— das muss 200 ergeben."
         : FEED.fehler === "nicht eingerichtet"
           ? 'Noch keine Quelle eingetragen. Oben rechts auf <b>⚙ ZUGÄNGE</b>.'
           : "Abruf gestört: " + FEED.fehler) + "</div>";
