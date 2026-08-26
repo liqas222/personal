@@ -107,13 +107,16 @@ body[data-modus="detail"][data-frei="ja"] #zuruecksetzen{left:auto;right:280px;t
 /* Ebenenleiste — fest unter dem Kopf statt als Fenster über der Karte.
    Ein Schaltpult, das die Karte verdeckt, ist genau da im Weg, wo man
    hinschaut. */
-#leiste{flex:none;display:flex;align-items:stretch;gap:0;background:#070b10;
-  border-bottom:1px solid var(--rand);overflow-x:auto}
+/* Umbrechen statt seitlich scrollen: mit der Zeitraumwahl davor passte die
+   Ebenenliste nicht mehr in eine Zeile und lief rechts über den Zähler. Ein
+   verstecktes Seitwärtsscrollen findet niemand — zwei Reihen schon. */
+#leiste{flex:none;display:flex;align-items:stretch;flex-wrap:wrap;gap:0;
+  background:#070b10;border-bottom:1px solid var(--rand)}
 #leiste .lb{display:flex;align-items:center;padding:0 12px;color:var(--dim);
   font-size:9px;letter-spacing:2px;flex:none;border-right:1px solid var(--rand)}
 #leiste .lb.re{margin-left:auto;border-right:0;border-left:1px solid var(--rand);
   color:var(--phos)}
-#ebenen{display:flex;flex:1;min-width:0}
+#ebenen{display:flex;flex:1 1 auto;flex-wrap:wrap;min-width:0}
 #ebenen .zeile{display:flex;align-items:center;gap:8px;padding:7px 13px;
   cursor:pointer;user-select:none;color:var(--dim);letter-spacing:1px;
   font-size:10px;border-right:1px solid #101c18;white-space:nowrap;
@@ -279,6 +282,47 @@ body[data-modus="quiz"] #quizleiste{display:flex}
 body:not([data-modus="detail"]) #zurueck{display:none}
 body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none}
 
+/* Zeitraumwahl. Steht links in der Leiste, vor den Ebenen: was man sieht,
+   hängt zuerst am Zeitraum und erst dann an den Ebenen. */
+#fenster{display:flex;gap:4px;flex:none;align-items:center;padding:5px 10px}
+.fb{background:#0a1219;border:1px solid var(--rand);color:var(--ink2);
+  padding:3px 9px;border-radius:4px;cursor:pointer;font:inherit;font-size:10px;
+  letter-spacing:.08em;white-space:nowrap}
+.fb:hover{border-color:var(--ink2);color:var(--ink)}
+.fb.an{background:#0d2318;border-color:var(--phos);color:var(--phos);
+  font-weight:700}
+.lb.tr{border-left:1px solid var(--rand);padding-left:12px;margin-left:8px}
+
+/* Ereignis-Einzelansicht im Panel */
+.ekopf{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.eart{background:#2a0d0d;border:1px solid #6b2020;color:#ff8a8a;
+  padding:2px 8px;border-radius:3px;font-size:10.5px;font-weight:700;
+  letter-spacing:.06em}
+.etext{font-size:12.5px;line-height:1.7;color:var(--ink);
+  border-left:2px solid var(--blut);padding-left:10px;margin-bottom:12px}
+.efeld{border:1px solid var(--rand);border-radius:6px;overflow:hidden;
+  margin-bottom:12px}
+.ez{display:flex;gap:10px;padding:5px 9px;font-size:11px;
+  border-bottom:1px solid #101a20}
+.ez:last-child{border-bottom:0}
+.ek2{color:var(--dim);flex:0 0 88px}
+.ez span:last-child{color:var(--ink2);flex:1}
+.ehinweis{color:var(--ink2);font-size:11px;line-height:1.6;
+  background:#0c141b;border-radius:6px;padding:9px 10px;margin-bottom:10px}
+.ewarn{color:var(--dim);font-size:11px;line-height:1.6;
+  border:1px solid #4a3a10;background:#17130a;border-radius:6px;
+  padding:9px 10px;margin-bottom:12px}
+.ewarn b{color:var(--amber)}
+.ebtn{display:block;width:100%;margin-bottom:7px;background:#0d2318;
+  border:1px solid var(--phos);color:var(--phos);padding:7px;
+  border-radius:5px;cursor:pointer;font:inherit;font-size:11px}
+.ebtn:hover{background:#143623}
+.ebtn.zweit{background:#111a1f;border-color:var(--rand);color:var(--ink2)}
+.ebtn.zweit:hover{background:#16232a}
+.fkl{color:var(--dim);font-size:10.5px;margin-top:4px;line-height:1.5;
+  text-transform:none;letter-spacing:0}
+.ereig:hover,.meld:hover{background:#0e1820}
+
 /* Kurzlage in der Meldungsspalte — steht beim Start neben der Karte. */
 .kurzlage{border:1px solid var(--rand);border-radius:6px;margin-bottom:12px;
   overflow:hidden}
@@ -372,7 +416,9 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 </header>
 
 <div id="leiste">
-  <span class="lb">EBENEN</span>
+  <span class="lb">ZEITRAUM</span>
+  <div id="fenster"></div>
+  <span class="lb tr">EBENEN</span>
   <div id="ebenen"></div>
   <span class="lb re" id="ebZahl2"></span>
 </div>

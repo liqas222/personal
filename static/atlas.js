@@ -83,7 +83,14 @@ function init() {
       }
       return { pts: pts, bbox: [w, s2, e, n] };
     });
-    return { n: l.n, id: l.id, polys: polys };
+    // Grobe Grösse, nur zum Vergleichen. Sie entscheidet bei Enklaven, wer
+    // gewinnt: Liechtenstein liegt in Österreich, Monaco in Frankreich —
+    // wer beide trifft, meint das kleinere.
+    let flaeche = 0;
+    for (const p of polys) {
+      flaeche += (p.bbox[2] - p.bbox[0]) * (p.bbox[3] - p.bbox[1]);
+    }
+    return { n: l.n, id: l.id, polys: polys, flaeche: flaeche };
   });
 
   resize();
@@ -121,6 +128,7 @@ function init() {
   };
 
   bauListe();
+  bauFenster();
   bauEbenen();
   bauStatuslegende();
   malAuswahl();
@@ -408,6 +416,92 @@ let LIVE = null;
 let FEED = null;
 let FEED_VERSUCHT = false;   // erst nach dem ersten Abruf etwas behaupten
 let FEED_FEHLER = null;
+
+/* Die Statuszeile unten muss dasselbe zählen wie die Karte zeigt — sonst
+   steht dort "7 Meldungen", während vier zu sehen sind. */
+function malFeedStatus() {
+  const feld = document.getElementById("lgFeed");
+  if (!feld || !FEED || FEED.fehler) return;
+  const b = beitraegeImFenster();
+  const ereig = b.filter((x) => (x.arten || []).length).length;
+  feld.innerHTML = '<b style="color:' + (ereig ? "var(--blut)" : "var(--phos)") +
+    '">' + (ereig ? ereig + (ereig === 1 ? " EREIGNIS · " : " EREIGNISSE · ") : "") +
+    b.length + (b.length === 1 ? " MELDUNG" : " MELDUNGEN") + "</b>";
+  feld.title = "Zeitraum " + fensterText() + " · Stand " + (FEED.stand || "?");
+}
+
+/* ---------- Zeitfenster ----------
+
+   Ohne das blieb jedes Ereignis für immer auf der Karte stehen: gezeichnet
+   wurde schlicht alles, was der Feed hergab (bis zu 400 Meldungen), ohne
+   Rücksicht auf das Alter. Nach zwei Tagen war die Karte zugepflastert und
+   man sah nicht mehr, was gerade passiert.
+
+   "alles" bleibt als Wahl erhalten — aber nicht als Voreinstellung. */
+
+const FENSTER = [
+  { id: "1", t: "1 STD", h: 1 },
+  { id: "12", t: "12 STD", h: 12 },
+  { id: "24", t: "1 TAG", h: 24 },
+  { id: "168", t: "1 WOCHE", h: 168 },
+  { id: "alle", t: "ALLES", h: 0 },
+];
+let fenster = "24";
+
+/* Zeitpunkt einer Meldung als Millisekunden, oder null. Die Zeitangaben
+   kommen normiert vom Server ("YYYY-MM-DDTHH:MM", UTC ohne Kennzeichnung) —
+   das Z muss hier dran, sonst liest der Browser sie als Ortszeit und alles
+   verschiebt sich um den eigenen Zeitzonenversatz. */
+function zeitpunkt(iso) {
+  if (!iso) return null;
+  const t = Date.parse(iso + (/[Zz]|[+-]\d\d:?\d\d$/.test(iso) ? "" : "Z"));
+  return isNaN(t) ? null : t;
+}
+
+/* Fällt die Meldung ins gewählte Fenster?
+
+   Meldungen ohne Zeitstempel werden NICHT stillschweigend behalten: sie
+   liessen sich sonst durch kein Fenster mehr wegfiltern und wären genau das
+   Problem, das hier behoben wird. Sie erscheinen unter "ALLES" und die
+   Meldungsspalte sagt, wie viele es sind. */
+function imFenster(b) {
+  const h = (FENSTER.find((f) => f.id === fenster) || {}).h || 0;
+  if (!h) return true;
+  const t = zeitpunkt(b.zeit);
+  if (t === null) return false;
+  return Date.now() - t <= h * 3600 * 1000;
+}
+
+function beitraegeImFenster() {
+  return ((FEED || {}).beitraege || []).filter(imFenster);
+}
+
+function fensterText() {
+  return (FENSTER.find((f) => f.id === fenster) || {}).t || "";
+}
+
+function bauFenster() {
+  const el = document.getElementById("fenster");
+  if (!el) return;
+  el.innerHTML = FENSTER.map((f) =>
+    '<button class="fb' + (f.id === fenster ? " an" : "") +
+    '" data-f="' + f.id + '">' + f.t + "</button>").join("");
+  el.querySelectorAll(".fb").forEach((b) => {
+    b.onclick = () => {
+      fenster = b.dataset.f;
+      bauFenster();
+      // Alles neu bauen, was gefiltert wird — Karte zeichnet sich ohnehin
+      // in jedem Bild neu, die Listen nicht.
+      GESEHEN.clear();
+      ALARME.length = 0;
+      bauEbenen();
+      malFeedStatus();
+      if (modus === "lage") bauKacheln();
+      else if (!AUSWAHL.size && modus !== "detail") bauFeedPanel();
+      else if (aktiv && modus === "detail") bauPanel(aktiv);
+    };
+  });
+}
 let VERLAUF = null;
 
 async function holeLive() {
@@ -477,11 +571,7 @@ async function holeFeed() {
         (d.fehler === "nicht eingerichtet" ? "NICHT EINGERICHTET" : "FEHLER") + "</b>";
       feld.title = d.fehler;
     } else {
-      const ereig = d.beitraege.filter((b) => (b.arten || []).length).length;
-      feld.innerHTML = '<b style="color:' + (ereig ? "var(--blut)" : "var(--phos)") +
-        '">' + (ereig ? ereig + " EREIGNISSE · " : "") + d.beitraege.length +
-        " MELDUNGEN</b>";
-      feld.title = "Stand " + (d.stand || "?");
+      malFeedStatus();
     }
   } catch (e) {
     FEED = null;
@@ -559,14 +649,20 @@ const HEFTIG = ["drohne", "rakete", "explosion", "angriff", "mine"];
 function pruefeAlarme() {
   if (!FEED || !FEED.beitraege) return;
   let erster = GESEHEN.size === 0;
-  for (const b of FEED.beitraege) {
+  for (const b of beitraegeImFenster()) {
     if (GESEHEN.has(b.id)) continue;
     GESEHEN.add(b.id);
     // Beim allerersten Abruf nicht die ganze Historie durchspielen.
     if (erster) continue;
     const arten = (b.arten || []).filter((a) => HEFTIG.includes(a));
     if (!arten.length) continue;
-    for (const id of b.engen) {
+    // Am Ort des Geschehens, Enge nur als Rueckfall — wie bei den Symbolen.
+    if (b.ort) {
+      ALARME.push({ p: b.ort, art: arten[0], start: performance.now(),
+                    text: ART_TEXT[arten[0]] || arten[0] });
+      continue;
+    }
+    for (const id of b.engen || []) {
       const e = ENGEN.find((x) => x.id === id);
       if (e) ALARME.push({ p: e.pos, art: arten[0], start: performance.now(),
                            text: ART_TEXT[arten[0]] || arten[0] });
@@ -754,7 +850,7 @@ const ART_SYMBOL = {
 function zeichneBahnen(now) {
   if (!FEED || !FEED.beitraege) return;
   let k = 0;
-  for (const b of FEED.beitraege) {
+  for (const b of beitraegeImFenster()) {
     const bahn = b.bahn || [];
     const von = bahn[0], nach = bahn[1];
     if (!von || !nach || !(b.arten || []).length) continue;
@@ -828,7 +924,10 @@ function zeichneEreignisse(now) {
     const g = (proOrt[k] = proOrt[k] || { pos: pos, liste: [] });
     g.liste.push({ art: art, b: b });
   };
-  for (const b of FEED.beitraege) {
+  // Beim Zeichnen merken, wo welches Symbol landet — sonst liesse es sich
+  // nicht anklicken. Die Liste wird in jedem Bild neu gefüllt.
+  EREIGNIS_TREFFER.length = 0;
+  for (const b of beitraegeImFenster()) {
     for (const art of b.arten || []) {
       if (!ART_SYMBOL[art]) continue;
       if (b.ort) {
@@ -854,6 +953,7 @@ function zeichneEreignisse(now) {
       const w = -Math.PI / 2 + (i - (zeigen.length - 1) / 2) * 0.52;
       const r = 30;
       const x = mx + Math.cos(w) * r, y = my + Math.sin(w) * r;
+      EREIGNIS_TREFFER.push({ x: x, y: y, art: z.art, b: z.b });
       ctx.save();
       ctx.translate(x, y);
       // Verbindungslinie zum Ort
@@ -868,10 +968,18 @@ function zeichneEreignisse(now) {
       ctx.arc(0, 0, 11, 0, 7);
       ctx.fillStyle = "rgba(8,4,4,.88)";
       ctx.fill();
-      ctx.strokeStyle = "#ff2d2d";
-      ctx.lineWidth = 1.4;
-      ctx.globalAlpha = i === 0 ? puls : 0.75;
+      const istMarkiert = z.b.id === MARKIERT;
+      ctx.strokeStyle = istMarkiert ? "#ffb000" : "#ff2d2d";
+      ctx.lineWidth = istMarkiert ? 2.2 : 1.4;
+      ctx.globalAlpha = istMarkiert ? 1 : (i === 0 ? puls : 0.75);
       ctx.stroke();
+      if (istMarkiert) {
+        ctx.beginPath();
+        ctx.arc(0, 0, 16 + Math.sin(now / 300) * 2, 0, 7);
+        ctx.strokeStyle = "#ffb000";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
       ctx.globalAlpha = 1;
       ctx.strokeStyle = "#ff8a8a";
       ctx.fillStyle = "#ff8a8a";
@@ -938,21 +1046,65 @@ function meldungsBlock(engeId) {
    heisst drin — Löcher (Enklaven, Seen) kippen die Parität und fallen damit
    automatisch heraus. */
 function landBei(lon, lat) {
+  // Die Ringe sind entwirrt, laufen also bei Russland und Fidschi über
+  // ±180 hinaus. Ein Klick kommt dagegen immer normiert an. Ohne die
+  // verschobenen Kopien war die russische Pazifikküste nicht anklickbar.
+  const kandidaten = [lon, lon + 360, lon - 360];
+  // Nicht der erste Treffer gewinnt, sondern der kleinste. Vorher stand
+  // Österreich in der Liste vor Liechtenstein und schnappte jeden Klick auf
+  // die Enklave weg — auch beim Heranzoomen, denn an der Reihenfolge ändert
+  // Zoom nichts.
+  let bestes = null, kleinste = Infinity;
   for (const l of LAENDER) {
-    let drin = false;
+    if (l.flaeche >= kleinste) continue;
+    for (const x0 of kandidaten) {
+      let drin = false;
+      for (const p of l.polys) {
+        const [w, s, e, n] = p.bbox;
+        if (x0 < w || x0 > e || lat < s || lat > n) continue;
+        const pts = p.pts;
+        for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+          const [xi, yi] = pts[i], [xj, yj] = pts[j];
+          if (yi > lat !== yj > lat &&
+              x0 < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) drin = !drin;
+        }
+      }
+      if (drin) { bestes = l.n; kleinste = l.flaeche; break; }
+    }
+  }
+  return bestes;
+}
+
+/* Das nächstgelegene Land innerhalb eines Umkreises in Bildschirmpunkten.
+
+   Eine reine Punkt-in-Fläche-Prüfung reicht nicht: 38 der 245 Länder sind so
+   klein, dass sie bei Weltzoom weniger als einen Pixel einnehmen — Singapur,
+   Malta, Monaco, Liechtenstein, die Malediven, Barbados, Macao. Die waren
+   schlicht nicht anklickbar, egal wie genau man zielt.
+
+   Deshalb: zuerst exakt prüfen, und nur wenn das nichts ergibt, das nächste
+   Land im Umkreis nehmen. So bleibt ein Klick mitten in Frankreich Frankreich
+   und wird nicht von einem Nachbarn weggeschnappt. */
+function landNahe(mx, my, radius) {
+  let bestes = null, besteD = radius * radius;
+  for (const l of LAENDER) {
     for (const p of l.polys) {
+      // Grober Vorfilter über die Ecken des Umrisses, damit nicht bei jedem
+      // Klick alle Stützpunkte der Welt durchgerechnet werden.
       const [w, s, e, n] = p.bbox;
-      if (lon < w || lon > e || lat < s || lat > n) continue;
-      const pts = p.pts;
-      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-        const [xi, yi] = pts[i], [xj, yj] = pts[j];
-        if (yi > lat !== yj > lat &&
-            lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) drin = !drin;
+      const [x1, y1] = view.project(w, n);
+      const [x2, y2] = view.project(e, s);
+      const dx = mx < x1 ? x1 - mx : mx > x2 ? mx - x2 : 0;
+      const dy = my < y1 ? y1 - my : my > y2 ? my - y2 : 0;
+      if (dx * dx + dy * dy > besteD) continue;
+      for (const [lo, la] of p.pts) {
+        const [px, py] = view.project(lo, la);
+        const d = (px - mx) ** 2 + (py - my) ** 2;
+        if (d < besteD) { besteD = d; bestes = l.n; }
       }
     }
-    if (drin) return l.n;
   }
-  return null;
+  return bestes;
 }
 
 /* Grosskreis zwischen zwei Punkten. Eine gerade Linie auf der Mercatorkarte
@@ -1718,6 +1870,100 @@ function mausPos(ev) {
   return [ev.clientX - r.left, ev.clientY - r.top];
 }
 
+/* ---------- Ereignisse anklicken ----------
+
+   Die Symbole werden beim Zeichnen mit ihrer Bildschirmposition in
+   EREIGNIS_TREFFER abgelegt. Anders geht es nicht: wo ein Symbol landet,
+   ergibt sich erst aus der Auffächerung um den Ort und ist nicht aus den
+   Daten allein zu berechnen. */
+
+const EREIGNIS_TREFFER = [];
+
+function trefferEreignis(mx, my) {
+  // Rückwärts, damit das zuletzt Gezeichnete — also das oben liegende —
+  // zuerst trifft.
+  for (let i = EREIGNIS_TREFFER.length - 1; i >= 0; i--) {
+    const t = EREIGNIS_TREFFER[i];
+    if ((t.x - mx) ** 2 + (t.y - my) ** 2 < 14 * 14) return t;
+  }
+  return null;
+}
+
+/* Alles, was über ein einzelnes Ereignis bekannt ist — und ausdrücklich
+   auch, was nicht bekannt ist. Eine Meldung ist keine Bestätigung. */
+function zeigeEreignis(tr) {
+  const b = tr.b;
+  aktiv = null;
+  AUSWAHL.clear();
+  malAuswahl();
+  document.body.dataset.modus = "welt";
+  modus = "welt";
+  requestAnimationFrame(resize);
+  document.getElementById("pTitel").textContent =
+    (ART_TEXT[tr.art] || tr.art).toUpperCase();
+
+  const zp = zeitpunkt(b.zeit);
+  const ort = b.ortname
+    ? b.ortname.charAt(0).toUpperCase() + b.ortname.slice(1)
+    : null;
+  const zeile = (k, v) => v
+    ? '<div class="ez"><span class="ek2">' + k + "</span><span>" + v +
+      "</span></div>" : "";
+
+  // Flugbahn nur beschreiben, wenn beide Enden im Text standen.
+  const bahn = b.bahn || [];
+  const bahnText = (bahn[0] && bahn[1])
+    ? "Start und Ziel wurden im Text genannt und sind auf der Karte "
+      + "verbunden. Die Linie ist der kürzeste Weg zwischen beiden Punkten, "
+      + "keine gemessene Flugbahn."
+    : null;
+
+  const engen = (b.engen || []).map((id) => {
+    const e = ENGEN.find((y) => y.id === id);
+    return e ? e.name : id;
+  });
+  const sp = SCHAUPLATZ_NACH_ID[b.schauplatz || "sonstige"];
+
+  document.getElementById("pInhalt").innerHTML =
+    '<div class="ekopf">' +
+    (b.arten || []).map((a) => '<span class="eart">' + (ART_TEXT[a] || a) +
+      "</span>").join("") + "</div>" +
+    '<div class="etext">' + String(b.text || "").replace(/[<>&]/g, "") +
+    "</div>" +
+    '<div class="efeld">' +
+    zeile("Ort", ort || "nicht erkannt") +
+    zeile("Schauplatz", sp ? sp.name : null) +
+    zeile("Zeit", b.zeit
+      ? b.zeit.replace("T", " ") + " UTC · " + vorZeit(b.zeit)
+      : "kein Zeitstempel in der Quelle") +
+    zeile("Quelle", "@" + (b.konto || "?")) +
+    zeile("Meerengen", engen.length ? engen.join(" · ") : null) +
+    "</div>" +
+    (bahnText ? '<div class="ehinweis">' + bahnText + "</div>" : "") +
+    '<div class="ewarn"><b>Ungeprüfte Meldung.</b> Was hier steht, ist der ' +
+    "Text der Quelle, nicht eine Bestätigung. Die Ereignisart wurde aus " +
+    "Stichworten im Text abgeleitet — ein Text über eine Drohne kann auch " +
+    "eine Ankündigung oder ein Dementi sein. Der Ort ist der erste im Text " +
+    "erkannte Ortsname und muss nicht der Ort des Geschehens sein.</div>" +
+    (ort && b.ort
+      ? '<button class="ebtn" id="ezoom">Auf der Karte heranholen</button>'
+      : "") +
+    '<button class="ebtn zweit" id="ezurueck">Zurück zu den Meldungen</button>';
+
+  const zoom = document.getElementById("ezoom");
+  if (zoom) zoom.onclick = () => {
+    const [x, y] = b.ort;
+    fliegeZu([x - 8, y - 6, x + 8, y + 6]);
+  };
+  document.getElementById("ezurueck").onclick = bauFeedPanel;
+  if (zp !== null) markiere(b);
+}
+
+/* Das angeklickte Ereignis auf der Karte hervorheben, damit klar ist,
+   welches Symbol gerade im Panel steht. */
+let MARKIERT = null;
+function markiere(b) { MARKIERT = b ? b.id : null; }
+
 function trefferMarke(mx, my) {
   for (const e of ENGEN) {
     const [x, y] = view.project(e.pos[0], e.pos[1]);
@@ -1906,6 +2152,10 @@ function onClick(ev) {
   // Der Merker muss getrennt geführt werden: beim Klick ist das Ziehen
   // bereits beendet und zieht wieder null.
   if (gezogen) { gezogen = false; return; }
+  // Ereignisse haben Vorrang: sie liegen oben auf der Karte, also muss sie
+  // ein Klick auch zuerst erwischen.
+  const tr = trefferEreignis(mx, my);
+  if (tr) { zeigeEreignis(tr); return; }
   const e = trefferMarke(mx, my);
   if (e) { zeigeEnge(e); return; }
   // In der Rollen-Ansicht bedeuten die Farben etwas anderes — dort keine
@@ -1915,7 +2165,8 @@ function onClick(ev) {
   // Mehrfachauswahl ist der Normalfall — genau der Vergleich zweier Länder
   // ist ja die interessante Frage.
   const [lon, lat] = view.invert(mx, my);
-  const name = landBei(((lon + 180) % 360 + 360) % 360 - 180, lat);
+  const name = landBei(((lon + 180) % 360 + 360) % 360 - 180, lat)
+    || landNahe(mx, my, 12);
   // Klick ins Meer wählt nichts ab. Die Auswahl versehentlich zu verlieren
   // war der ärgerlichste Fehlgriff — Leeren geht über den Knopf oder Esc.
   if (!name) return;
@@ -1995,8 +2246,7 @@ function ebenenAnzahl(id) {
   // Die Ereignisse kommen aus dem laufenden Abruf, nicht aus einer Datei —
   // ihre Zahl steht erst fest, wenn Meldungen da sind.
   if (id === "ereignisse") {
-    return FEED && FEED.beitraege
-      ? FEED.beitraege.filter((b) => (b.arten || []).length).length : 0;
+    return beitraegeImFenster().filter((b) => (b.arten || []).length).length;
   }
   return { konflikte: KONFLIKTE.length, ziele: ZIELE.length,
            kontrolle: KONTROLLZONEN.length, status: Object.keys(STATUS).length,
@@ -2053,6 +2303,7 @@ function bauStatuslegende() {
    man ein Land oder eine Enge anwählt, tritt sie zurück. */
 function bauFeedPanel() {
   if (AUSWAHL.size || (modus === "detail" && aktiv)) return;
+  markiere(null);
   document.getElementById("pTitel").textContent = "LAGEMELDUNGEN";
   const el = document.getElementById("pInhalt");
   if (!FEED_VERSUCHT) {
@@ -2071,14 +2322,17 @@ function bauFeedPanel() {
           : "Abruf gestört: " + FEED.fehler) + "</div>";
     return;
   }
-  const b = FEED.beitraege || [];
+  const alle = FEED.beitraege || [];
+  const b = beitraegeImFenster();
   const ereig = b.filter((x) => (x.arten || []).length);
+  const ohneZeit = alle.filter((x) => !x.zeit).length;
   // Kurzlage über den Meldungen: eine Zeile je Kriegsschauplatz, sortiert
   // nach Betrieb. Damit steht beim Start die Karte im Bild UND daneben,
   // was gerade wo passiert — ohne einen Klick.
   const kurz = lageKurz();
   const zeile = (x, alarm) =>
-    '<div class="' + (alarm ? "ereig" : "meld") + '">' +
+    '<div class="' + (alarm ? "ereig" : "meld") + '" data-id="' +
+    String(x.id).replace(/"/g, "") + '">' +
     '<div class="' + (alarm ? "ek" : "mk") + '">' +
     (alarm ? x.arten.map((a) => ART_TEXT[a] || a).join(" · ") : "@" + x.konto) +
     "<span>" + (x.zeit || "").slice(0, 16).replace("T", " ") + "</span></div>" +
@@ -2088,15 +2342,43 @@ function bauFeedPanel() {
       return e ? e.kurz : id;
     }).join(" · ") + (alarm ? " · @" + x.konto : "") + "</div>" : "") + "</div>";
   el.innerHTML = kurz +
-    '<div class="feedkopf">' + b.length + " Meldungen · " +
-    (ereig.length ? '<b style="color:#ff6b6b">' + ereig.length + " Ereignisse</b>"
-      : "keine Ereignisse") + "</div>" +
+    '<div class="feedkopf">' + b.length +
+    (b.length === 1 ? " Meldung in " : " Meldungen in ") + fensterText() +
+    " · " +
+    (ereig.length
+      ? '<b style="color:#ff6b6b">' + ereig.length +
+        (ereig.length === 1 ? " Ereignis</b>" : " Ereignisse</b>")
+      : "keine Ereignisse") +
+    (b.length < alle.length
+      ? '<div class="fkl">' + (alle.length - b.length) +
+        ((alle.length - b.length) === 1
+          ? " weitere Meldung ausserhalb des Zeitfensters"
+          : " weitere Meldungen ausserhalb des Zeitfensters") +
+        (ohneZeit && fenster !== "alle"
+          ? ", davon " + ohneZeit + " ohne Zeitstempel in der Quelle" : "") +
+        "</div>"
+      : "") + "</div>" +
     (ereig.length ? "<h3>Ereignisse</h3>" + ereig.slice(0, 12).map((x) => zeile(x, 1)).join("")
       : "") +
     "<h3>Alle Meldungen</h3>" +
     (b.length ? b.slice(0, 40).map((x) => zeile(x, 0)).join("")
-      : '<div class="leerhinweis">Noch nichts abgerufen.</div>');
+      : '<div class="leerhinweis">Nichts in diesem Zeitfenster.' +
+        (alle.length ? " Mit <b>ALLES</b> siehst du die älteren." : "") +
+        "</div>");
   kurzlageKlicks();
+  meldungsKlicks(b);
+}
+
+/* Meldungen in der Liste sind dieselben Ereignisse wie auf der Karte —
+   also muss ein Klick dort dasselbe Fenster oeffnen. */
+function meldungsKlicks(liste) {
+  document.querySelectorAll("#pInhalt .ereig, #pInhalt .meld").forEach((el) => {
+    const b = liste.find((x) => String(x.id) === el.dataset.id);
+    if (!b) return;
+    el.style.cursor = "pointer";
+    el.onclick = () => zeigeEreignis({ art: (b.arten || [])[0] || "angriff",
+                                       b: b });
+  });
 }
 
 /* ---------- Lagebild: eine Kachel je Kriegsschauplatz ----------
@@ -2161,22 +2443,33 @@ function lageSatz(k) {
 /* Kurzfassung des Lagebilds für die Spalte neben der Karte: eine Zeile je
    Schauplatz, an dem etwas läuft. Klick springt auf die Karte. */
 function lageKurz() {
-  if (!LAGE || !LAGE.kacheln) return "";
-  const mit = LAGE.kacheln.filter((k) => k.n24 > 0 || k.gesamt > 0);
-  if (!mit.length) return "";
-  return '<div class="kurzlage"><div class="klk">LAGE — LETZTE 24 STD.</div>' +
-    mit.slice(0, 6).map((k) => {
+  // Aus dem gewählten Zeitfenster gerechnet, nicht aus /api/lage. Sonst
+  // stand hier "letzte 24 Std." während oben eine Woche gewählt war — zwei
+  // verschiedene Zahlen fürs selbe, das verwirrt mehr als es hilft.
+  const b = beitraegeImFenster();
+  if (!b.length) return "";
+  const pro = {};
+  for (const x of b) {
+    const id = x.schauplatz || "sonstige";
+    const k = (pro[id] = pro[id] || { id: id, n: 0, arten: {}, letzte: null });
+    k.n++;
+    for (const a of x.arten || []) k.arten[a] = (k.arten[a] || 0) + 1;
+    if (x.zeit && (!k.letzte || x.zeit > k.letzte)) k.letzte = x.zeit;
+  }
+  const liste = Object.values(pro).sort((p, q) => q.n - p.n);
+  return '<div class="kurzlage"><div class="klk">LAGE — ' + fensterText() +
+    "</div>" +
+    liste.slice(0, 7).map((k) => {
       const s = SCHAUPLATZ_NACH_ID[k.id] || { name: k.id };
-      const st = lageStatus(k);
-      const arten = Object.entries(k.arten || {}).sort((a, b) => b[1] - a[1]);
+      const arten = Object.entries(k.arten).sort((p, q) => q[1] - p[1]);
       return '<button class="klz" data-sp="' + k.id + '">' +
-        '<span class="led ' + st.s + '"></span>' +
+        '<span class="led ' + (arten.length ? "rot" : "gruen") + '"></span>' +
         '<span class="kln">' + s.name.split(" — ")[0] + "</span>" +
         '<span class="kla">' +
         (arten.length
           ? arten.slice(0, 2).map((a) => ART_TEXT[a[0]] || a[0]).join(", ")
           : (k.letzte ? vorZeit(k.letzte) : "—")) + "</span>" +
-        '<span class="klc">' + k.n24 + "</span></button>";
+        '<span class="klc">' + k.n + "</span></button>";
     }).join("") +
     '<div class="klf">Meldungen, keine Ereigniszählung · alle ungeprüft · ' +
     "Klick zoomt die Karte</div></div>";

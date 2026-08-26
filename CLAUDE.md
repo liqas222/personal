@@ -101,6 +101,31 @@ Siehe `README.md` für Aufbau und Bedienung.
   wissen, dass der erste `hole_feed()`-Lauf startet, bevor der eigene Socket
   lauscht — eine Stub-Quelle auf demselben Server geht im ersten Zyklus leer aus.
 
+## Anklicken und Zeitfenster
+
+- **Punkt-in-Fläche allein reicht als Trefferprüfung nicht.** 38 der 245
+  Länder sind bei Weltzoom kleiner als ein Pixel — Singapur, Malta, Monaco,
+  die Malediven. Erst exakt prüfen, dann `landNahe()` im Umkreis von 12 px.
+- **Bei mehreren Treffern gewinnt das kleinste Land**, nicht das erste in der
+  Liste. Sonst schnappt Österreich jeden Klick auf Liechtenstein weg, und
+  Heranzoomen hilft nicht — an der Reihenfolge ändert Zoom nichts.
+- **Die Datumsgrenze trifft auch die Trefferprüfung.** Die Ringe sind
+  entwirrt und laufen über ±180 hinaus, der Klick kommt normiert an. Ohne
+  `lon ± 360` war Russlands Pazifikküste nicht anklickbar.
+- **Ereignisse brauchen ein Zeitfenster.** Ohne das stand jede Meldung für
+  immer auf der Karte. Alles, was filtert, geht durch `beitraegeImFenster()`
+  — Karte, Bahnen, Alarme, Ebenenzähler, Statuszeile, Kurzlage. Wer eine
+  neue Anzeige baut und `FEED.beitraege` direkt liest, baut den Fehler nach.
+- **Nur eine Zahl fürs selbe.** Die Kurzlage rechnet aus dem Zeitfenster, nicht
+  aus `/api/lage` — sonst stand dort „letzte 24 Std." während oben eine Woche
+  gewählt war.
+- **Meldungen ohne Zeitstempel fallen aus jedem Fenster ausser „ALLES".**
+  Sonst liessen sie sich durch keine Wahl mehr wegräumen. Wie viele es sind,
+  steht in der Meldungsspalte.
+- **Wo ein Ereignissymbol landet, ergibt sich erst beim Zeichnen** (Auffächerung
+  um den Ort). Deshalb wird die Bildschirmposition in `EREIGNIS_TREFFER`
+  mitgeschrieben — anders ist es nicht anklickbar.
+
 ## Handel und Abhängigkeit
 
 - Inhalte in `static/handel.js`. **Keine erfundenen Zahlen.** Warenstruktur
