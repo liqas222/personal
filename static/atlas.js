@@ -62,7 +62,17 @@ function entwirre(pts) {
     else if (d < -180) off += 360;
     out.push([pts[i][0] + off, pts[i][1]]);
   }
-  return out;
+  // Danach den Ring wieder in die Nähe der Karte rücken.
+  //
+  // Ohne das landete Russlands Hauptlandmasse bei Längengrad −333 bis −180:
+  // je nachdem, wo der Ring anfängt, schaukelt sich der Versatz beim
+  // Entwirren um volle 360 Grad auf. Gezeichnet wurde sie dann nur über die
+  // Versatzkopie — das Land erschien doppelt — und die Trefferprüfung suchte
+  // sie am falschen Ort.
+  let w = Infinity, e = -Infinity;
+  for (const [x] of out) { if (x < w) w = x; if (x > e) e = x; }
+  const schub = Math.round((w + e) / 2 / 360) * 360;
+  return schub ? out.map(([x, y]) => [x - schub, y]) : out;
 }
 
 /* ---------- Aufbau ---------- */
@@ -1275,6 +1285,42 @@ function zeichneAuswahlBoegen(now) {
         { now: now, phase: (k++ * 0.17) % 1, breite: 2, hoehe: 0.78 });
     }
   }
+  // Die Partnerländer beschriften. Ohne Namen an den Enden ist eine Linie
+  // nur eine Linie — man sieht, DASS es eine Verbindung gibt, aber nicht
+  // wohin und schon gar nicht wofür.
+  // Erst sammeln, wer in welcher Richtung Partner ist, dann einmal
+  // beschriften. Getrennt gezeichnet stand jedes Land doppelt da — einmal
+  // als Abnehmer und einmal als Lieferant.
+  const rollen = {};
+  for (const name of AUSWAHL) {
+    const h = HANDEL[name];
+    if (!h) continue;
+    for (const p of h.pAus) {
+      if (!AUSWAHL.has(p)) (rollen[p] = rollen[p] || {}).aus = true;
+    }
+    for (const p of h.pEin) {
+      if (!AUSWAHL.has(p)) (rollen[p] = rollen[p] || {}).ein = true;
+    }
+  }
+  for (const [p, r] of Object.entries(rollen)) {
+    const z = landMitte(p);
+    if (!z) continue;
+    const [x, y] = view.project(z[0], z[1]);
+    if (x < -40 || x > W + 40 || y < 0 || y > H) continue;
+    const beides = r.aus && r.ein;
+    const farbe = beides ? "#c9b06a"
+      : r.aus ? ROLLEN.ausfuhr.c : ROLLEN.einfuhr.c;
+    ctx.font = '600 9.5px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = farbe;
+    halo(((HANDEL[p] && HANDEL[p].t) || p).toUpperCase() +
+      (beides ? " \u21c4" : r.aus ? " \u2190" : " \u2192"), x, y + 8);
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, 7);
+    ctx.fillStyle = farbe;
+    ctx.fill();
+  }
   // Ausgewählte Länder markieren
   for (const name of AUSWAHL) {
     const m = landMitte(name);
@@ -2004,6 +2050,17 @@ function setzeAusschnitt(bbox, vonHand) {
   // Also nur ablehnen, wenn der Ausschnitt tatsächlich noch grösser wird.
   if (spanne < 0.05) return;
   if (spanne > 500 && spanne > bisher + 0.01) return;
+  // Seitlich am Rand der Welt anhalten, statt weiterzulaufen. Vorher liess
+  // sich beliebig weit schieben; ab 360 Grad Versatz kam die Karte ein
+  // zweites Mal ins Bild und man wusste nicht mehr, welches Russland man
+  // vor sich hat. Verschoben statt verworfen — sonst klemmt das Ziehen.
+  if (spanne >= 360) {
+    bbox = [-180, bbox[1], -180 + spanne, bbox[3]];
+  } else if (bbox[0] < -180) {
+    bbox = [-180, bbox[1], -180 + spanne, bbox[3]];
+  } else if (bbox[2] > 180) {
+    bbox = [180 - spanne, bbox[1], 180, bbox[3]];
+  }
   // Breitengrade begrenzen, statt die Bewegung zu verwerfen — sonst klemmt
   // die Karte am Rand fest.
   if (bbox[3] > 89) { const d = bbox[3] - 89; bbox = [bbox[0], bbox[1] - d, bbox[2], 89]; }
@@ -2196,12 +2253,54 @@ function malAuswahl() {
       malAuswahl();
     };
   });
+  bauBogenlegende();
   if (!AUSWAHL.size) bauFeedPanel();
   if (AUSWAHL.size) {
     document.getElementById("pTitel").textContent =
       "HANDELSPROFIL · " + AUSWAHL.size;
     bauHandelPanel();
   }
+}
+
+/* Was die Bögen bedeuten — direkt neben der Karte, nicht nur im Panel.
+
+   Eine wichtige Ehrlichkeit steht hier mit drin: die Bögen sagen, DASS ein
+   Land zu den Hauptpartnern gehört, nicht WIE VIEL und nicht WOMIT.
+   Belastbare bilaterale Zahlen liegen nicht vor (siehe handel.js), und eine
+   erfundene Mengenangabe an einer Linie wäre schlimmer als keine. Die
+   Warengruppen im Panel sind die Gesamtausfuhr des Landes, nicht die Ausfuhr
+   an diesen einen Partner. */
+function bauBogenlegende() {
+  const el = document.getElementById("bogenlegende");
+  if (!el) return;
+  if (!AUSWAHL.size) { el.innerHTML = ""; return; }
+  const namen = [...AUSWAHL].map((n) => (HANDEL[n] && HANDEL[n].t) || n);
+  const mit = [...AUSWAHL].filter((n) => HANDEL[n]);
+  if (!mit.length) {
+    el.innerHTML = '<div class="bt2">LINIEN</div>' +
+      "Für " + namen.join(", ") + " liegt kein Handelsprofil vor — deshalb " +
+      "sind keine Linien gezeichnet.";
+    return;
+  }
+  const waren = mit.map((n) => {
+    const h = HANDEL[n];
+    return "<b>" + h.t + "</b> führt vor allem " + h.aus.slice(0, 3).join(", ") +
+      " aus und " + h.ein.slice(0, 3).join(", ") + " ein.";
+  }).join("<br>");
+  el.innerHTML =
+    '<div class="bt2">WAS DIE LINIEN ZEIGEN</div>' +
+    '<div class="bz"><span class="bl" style="border-color:' +
+    ROLLEN.ausfuhr.c + '"></span><span>Ausfuhr — ' + namen.join(", ") +
+    " liefert dorthin</span></div>" +
+    '<div class="bz"><span class="bl" style="border-color:' +
+    ROLLEN.einfuhr.c + '"></span><span>Einfuhr — kommt von dort</span></div>' +
+    '<div class="bz"><span class="bl" style="border-color:#c9b06a"></span>' +
+    "<span>⇄ Partner in beide Richtungen</span></div>" +
+    '<div class="bw">' + waren +
+    "<br><br><b>Grenze:</b> Eine Linie sagt, dass das Land zu den " +
+    "Hauptpartnern zählt — nicht wie viel und nicht womit. Bilaterale " +
+    "Mengen liegen nicht belegt vor. Die Warengruppen oben sind der " +
+    "Gesamthandel des Landes, nicht der mit diesem Partner.</div>";
 }
 
 function bauHandelPanel() {
@@ -2230,8 +2329,14 @@ function bauHandelPanel() {
       }).join("");
       return '<div class="hbox"><h3>' + h.t + "</h3>" +
         '<p class="kern">' + h.kern + "</p>" +
-        liste("Ausfuhr", h.aus) + liste("Einfuhr", h.ein) +
-        liste("Abnehmer", namen(h.pAus)) + liste("Lieferanten", namen(h.pEin)) +
+        liste("Führt aus", h.aus) + liste("Führt ein", h.ein) +
+        liste("Abnehmer (Linien hinaus)", namen(h.pAus)) +
+        liste("Lieferanten (Linien herein)", namen(h.pEin)) +
+        '<div class="hz"><span class="hk"></span><span class="hv hinw">' +
+        "Die Warengruppen oben sind der Gesamthandel des Landes. Welche " +
+        "Ware zu welchem Partner geht, steht hier bewusst nicht — dafür " +
+        "liegen keine belastbaren bilateralen Zahlen vor." +
+        "</span></div>" +
         '<div class="hz"><span class="hk">Engpässe</span></div>' + engen +
         "</div>";
     }).join("") +

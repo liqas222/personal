@@ -30,6 +30,14 @@ Siehe `README.md` für Aufbau und Bedienung.
   aus und Land und Wasser kippen um.
 - **Datumsgrenze.** Ringe von Russland und Fidschi springen zwischen +180 und
   −180. Ohne `entwirre()` zieht jeder Sprung einen Strich quer über die Karte.
+- **Nach dem Entwirren den Ring zurückschieben.** Je nachdem, wo ein Ring
+  anfängt, schaukelt sich der Versatz um volle 360 Grad auf: Russlands
+  Hauptlandmasse lag bei −333 bis −180. Gezeichnet wurde sie nur über die
+  Versatzkopie — das Land erschien doppelt — und die Trefferprüfung suchte es
+  am falschen Ort. `entwirre()` rückt den Ring am Ende wieder in die Mitte.
+- **Seitlich am Weltrand anhalten.** Ohne Begrenzung in `setzeAusschnitt()`
+  liess sich beliebig weit schieben, bis die Karte ein zweites Mal ins Bild
+  kam. Verschieben statt verwerfen, sonst klemmt das Ziehen.
 - **Leinwand nach jedem Moduswechsel neu messen.** Panel und Quizleiste ändern
   die Grösse des Kartenfelds; ohne `resize()` behält der Canvas seine alte Höhe
   und überdeckt, was darunter eingeblendet wird.
@@ -131,6 +139,11 @@ Siehe `README.md` für Aufbau und Bedienung.
 - Inhalte in `static/handel.js`. **Keine erfundenen Zahlen.** Warenstruktur
   steht als Rangfolge da, nicht in Prozent — belastbare bilaterale Zahlen
   liegen nicht vor, und geraten wäre schlimmer als weggelassen.
+- **Eine Linie zu einem Partnerland muss sich selbst erklären.** Beschriftung
+  am Ende (Name plus ← → ⇄) und die Legende `bauBogenlegende()` neben der
+  Karte. Und ausdrücklich dazu, was sie NICHT sagt: dass ein Land Hauptpartner
+  ist, nicht wie viel und nicht womit. Die Warengruppen im Panel sind der
+  Gesamthandel des Landes, nicht der mit diesem Partner.
 - `ABHAENGIGKEIT` ist die eigentlich wertvolle Angabe (wie stark hängt ein
   Land an einer Enge). Jeder Eintrag nennt, worauf sich der Anteil bezieht,
   und einen Beleg. Wo nichts belegt ist, steht "Anteil nicht belegt".
