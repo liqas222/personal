@@ -12,6 +12,7 @@ was für lokales Ausprobieren genau richtig ist.
 """
 import base64
 import datetime
+import hashlib
 import email.utils
 import hmac
 import re
@@ -547,7 +548,7 @@ def lage_auswerten():
             "arten": {}, "engen": [], "letzte": None, "beispiele": [],
         })
         k["gesamt"] += 1
-        z = b.get("zeit") or ""
+        z = wann(b)
         if z >= grenze24:
             k["n24"] += 1
             for a in b.get("arten") or []:
@@ -560,7 +561,8 @@ def lage_auswerten():
         if z and (k["letzte"] is None or z > k["letzte"]):
             k["letzte"] = z
         if (b.get("arten") or []) and len(k["beispiele"]) < 3:
-            k["beispiele"].append({"zeit": z, "text": b["text"][:200],
+            k["beispiele"].append({"zeit": z, "geschaetzt": not b.get("zeit"),
+                                   "text": b["text"][:200],
                                    "arten": b["arten"],
                                    "ortname": b.get("ortname"),
                                    "konto": b.get("konto")})
@@ -577,28 +579,51 @@ def lage_auswerten():
             "fehler": FEED.get("fehler")}
 
 
+def wann(b):
+    """Der Zeitpunkt, nach dem sortiert und gefiltert wird.
+
+    Nicht jede Quelle liefert einen Zeitstempel: der HTML-Notpfad (eine Seite
+    ohne RSS) hat gar keinen, und manche Feeds liefern ein Datum, das sich
+    nicht lesen lässt. Solche Meldungen fielen aus jedem Zeitfenster heraus
+    und tauchten nur unter "alles" auf — der Monitor sah dann leer aus,
+    obwohl Meldungen da waren.
+
+    Ersatzweise gilt deshalb, wann der Server die Meldung zum ersten Mal
+    gesehen hat. Das ist NICHT der Zeitpunkt des Ereignisses und wird im UI
+    auch nie als solcher ausgegeben — es heisst dort "erstmals gesehen".
+    Für die Frage "ist das neu?" taugt es, für "wann ist es passiert?" nicht.
+    """
+    return b.get("zeit") or b.get("gesehen") or ""
+
+
 def _feed_zusammenfuehren(neu, webfehler=None, offset=None):
     """Neues mit Bekanntem mischen, doppelte Einträge fallen weg."""
     alt = FEED.get("beitraege", [])
+    # Wann wurde welche Meldung zuerst gesehen? Muss über den Abruf hinweg
+    # erhalten bleiben — sonst gilt eine bekannte Meldung bei jedem Zyklus
+    # wieder als frisch und wandert im Zeitfenster nach vorn.
+    frueher = {x["id"]: x.get("gesehen") for x in alt if x.get("gesehen")}
+    jetzt = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M")
     gesehen = set()
     zusammen = []
     for b in neu + alt:
         if b["id"] in gesehen:
             continue
         gesehen.add(b["id"])
+        b["gesehen"] = frueher.get(b["id"], b.get("gesehen") or jetzt)
         zusammen.append(b)
-    zusammen.sort(key=lambda b: b["zeit"] or "", reverse=True)
+    zusammen.sort(key=wann, reverse=True)
     # 120 war zu knapp, sobald mehrere Kanäle laufen: ein 24-Stunden-Fenster
     # wurde abgeschnitten und die Kachelzahlen stimmten nicht mehr.
     zusammen = zusammen[:400]
     for b in neu:
         if b["id"] not in {x["id"] for x in alt}:
-            verlauf_zaehlen((b["zeit"] or "")[:10], b["engen"])
+            verlauf_zaehlen(wann(b)[:10], b["engen"])
     verlauf_speichern()
     FEED.update({"beitraege": zusammen, "fehler": webfehler,
                  "quelle": "Telegram",
                  "konten": sorted({b["konto"] for b in zusammen}),
-                 "stand": zusammen[0]["zeit"] if zusammen else None})
+                 "stand": wann(zusammen[0]) if zusammen else None})
     if offset is not None:
         FEED["offset"] = offset
     try:
@@ -1003,7 +1028,12 @@ def hole_web():
                 # Nicht mehr nur "nennt eine Meerenge" — sonst fällt jede
                 # Kriegsmeldung durch, die keinen Kanalnamen enthält.
                 if meldenswert(t):
-                    eintrag = {"id": "web:" + name + ":" + str(hash(t)),
+                    # hashlib statt hash(): das eingebaute hash() ist in
+                    # Python pro Prozess zufällig gesalzen. Nach jedem
+                    # Neustart bekam dieselbe Meldung eine neue Kennung und
+                    # stand ein zweites Mal im Feed.
+                    kennung = hashlib.md5(t.encode("utf-8")).hexdigest()[:16]
+                    eintrag = {"id": "web:" + name + ":" + kennung,
                                "konto": name, "text": t[:600]}
                     eintrag.update(anreichern(t))
                     eintraege.append(eintrag)

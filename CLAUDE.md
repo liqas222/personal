@@ -139,9 +139,18 @@ Siehe `README.md` für Aufbau und Bedienung.
 - **Nur eine Zahl fürs selbe.** Die Kurzlage rechnet aus dem Zeitfenster, nicht
   aus `/api/lage` — sonst stand dort „letzte 24 Std." während oben eine Woche
   gewählt war.
-- **Meldungen ohne Zeitstempel fallen aus jedem Fenster ausser „ALLES".**
-  Sonst liessen sie sich durch keine Wahl mehr wegräumen. Wie viele es sind,
-  steht in der Meldungsspalte.
+- **Nicht jede Quelle liefert eine Zeit.** Der HTML-Notpfad (eine Seite ohne
+  RSS) hat gar keine, manche Feeds ein unlesbares Datum. Solche Meldungen
+  fielen aus jedem Fenster ausser „ALLES" — der Monitor sah leer aus, obwohl
+  Meldungen da waren. Ersatzweise gilt `gesehen`: wann der Server sie zuerst
+  gesehen hat. **Nie als Ereigniszeit ausgeben** — im UI heisst es „erstmals
+  gesehen", amber gesetzt, mit dem Hinweis, dass es der Abruf ist und nicht
+  das Ereignis. Filtern und sortieren über `wann()` bzw. `zeitVon()`.
+- **`gesehen` muss den Abruf überleben.** Sonst gilt eine bekannte Meldung in
+  jedem Zyklus wieder als frisch und wandert im Zeitfenster nach vorn.
+- **Kennungen mit `hashlib`, nie mit `hash()`.** Das eingebaute `hash()` ist
+  in Python pro Prozess zufällig gesalzen: nach jedem Neustart bekam dieselbe
+  Meldung eine neue Kennung und stand ein zweites Mal im Feed.
 - **Wo ein Ereignissymbol landet, ergibt sich erst beim Zeichnen** (Auffächerung
   um den Ort). Deshalb wird die Bildschirmposition in `EREIGNIS_TREFFER`
   mitgeschrieben — anders ist es nicht anklickbar.

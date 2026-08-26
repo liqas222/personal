@@ -7,7 +7,7 @@ const WELT_BBOX = [-180, -58, 180, 80];
    Ohne die lässt sich nicht unterscheiden, ob eine Änderung fehlt oder ob
    der Browser noch die alte Datei aus seinem Zwischenspeicher zeigt — und
    genau darüber haben wir schon zweimal aneinander vorbeigeredet. */
-const BAU = "2026-08-26 · 5";
+const BAU = "2026-08-26 · 6";
 
 let cv, ctx, W = 0, H = 0, DPR = 1;
 let LAENDER = [];          // dekodierte Ringe mit vorberechneter Bounding-Box
@@ -482,10 +482,28 @@ function zeitpunkt(iso) {
    liessen sich sonst durch kein Fenster mehr wegfiltern und wären genau das
    Problem, das hier behoben wird. Sie erscheinen unter "ALLES" und die
    Meldungsspalte sagt, wie viele es sind. */
+/* Der Zeitpunkt, nach dem gefiltert wird — echte Meldezeit, ersatzweise
+   wann der Server die Meldung zuerst gesehen hat. Ohne diesen Ersatz fielen
+   alle Meldungen aus Quellen ohne Zeitstempel (eine Webseite ohne RSS hat
+   keinen) aus jedem Fenster ausser "alles" heraus, und der Monitor sah leer
+   aus, obwohl Meldungen da waren.
+
+   Der Ersatz wird nie als Ereigniszeit ausgegeben — siehe zeitText(). */
+function zeitVon(b) {
+  return zeitpunkt(b.zeit) !== null ? zeitpunkt(b.zeit) : zeitpunkt(b.gesehen);
+}
+
+/* Wie eine Zeit dasteht. Geschätzt heisst geschätzt. */
+function zeitText(b) {
+  if (b.zeit) return vorZeit(b.zeit);
+  if (b.gesehen) return "erstmals gesehen " + vorZeit(b.gesehen);
+  return "Zeit unbekannt";
+}
+
 function imFenster(b) {
   const h = (FENSTER.find((f) => f.id === fenster) || {}).h || 0;
   if (!h) return true;
-  const t = zeitpunkt(b.zeit);
+  const t = zeitVon(b);
   if (t === null) return false;
   return Date.now() - t <= h * 3600 * 1000;
 }
@@ -1989,7 +2007,10 @@ function zeigeEreignis(tr) {
     zeile("Schauplatz", sp ? sp.name : null) +
     zeile("Zeit", b.zeit
       ? b.zeit.replace("T", " ") + " UTC · " + vorZeit(b.zeit)
-      : "kein Zeitstempel in der Quelle") +
+      : '<span class="geschaetzt">Die Quelle liefert keinen Zeitstempel. ' +
+        "Erstmals gesehen " + (b.gesehen ? vorZeit(b.gesehen) : "unbekannt") +
+        " — das ist der Zeitpunkt des Abrufs, nicht der des Ereignisses." +
+        "</span>") +
     zeile("Quelle", "@" + (b.konto || "?")) +
     zeile("Meerengen", engen.length ? engen.join(" · ") : null) +
     "</div>" +
@@ -2461,7 +2482,7 @@ function bauFeedPanel() {
   const alle = FEED.beitraege || [];
   const b = beitraegeImFenster();
   const ereig = b.filter((x) => (x.arten || []).length);
-  const ohneZeit = alle.filter((x) => !x.zeit).length;
+  const ohneZeit = b.filter((x) => !x.zeit).length;
   // Kurzlage über den Meldungen: eine Zeile je Kriegsschauplatz, sortiert
   // nach Betrieb. Damit steht beim Start die Karte im Bild UND daneben,
   // was gerade wo passiert — ohne einen Klick.
@@ -2471,7 +2492,8 @@ function bauFeedPanel() {
     String(x.id).replace(/"/g, "") + '">' +
     '<div class="' + (alarm ? "ek" : "mk") + '">' +
     (alarm ? x.arten.map((a) => ART_TEXT[a] || a).join(" · ") : "@" + x.konto) +
-    "<span>" + (x.zeit || "").slice(0, 16).replace("T", " ") + "</span></div>" +
+    '<span class="' + (x.zeit ? "" : "geschaetzt") + '">' + zeitText(x) +
+    "</span></div>" +
     '<div class="mt">' + x.text.replace(/[<>&]/g, "") + "</div>" +
     (x.engen.length ? '<div class="eq">' + x.engen.map((id) => {
       const e = ENGEN.find((y) => y.id === id);
@@ -2485,13 +2507,17 @@ function bauFeedPanel() {
       ? '<b style="color:#ff6b6b">' + ereig.length +
         (ereig.length === 1 ? " Ereignis</b>" : " Ereignisse</b>")
       : "keine Ereignisse") +
+    (ohneZeit
+      ? '<div class="fkl">' + ohneZeit + " davon ohne Zeitstempel in der " +
+        "Quelle — für die zählt, wann der Server sie zuerst gesehen hat, " +
+        "nicht wann das Ereignis war.</div>"
+      : "") +
     (b.length < alle.length
       ? '<div class="fkl">' + (alle.length - b.length) +
         ((alle.length - b.length) === 1
           ? " weitere Meldung ausserhalb des Zeitfensters"
           : " weitere Meldungen ausserhalb des Zeitfensters") +
-        (ohneZeit && fenster !== "alle"
-          ? ", davon " + ohneZeit + " ohne Zeitstempel in der Quelle" : "") +
+        "" +
         "</div>"
       : "") + "</div>" +
     (ereig.length ? "<h3>Ereignisse</h3>" + ereig.slice(0, 12).map((x) => zeile(x, 1)).join("")
@@ -2590,7 +2616,8 @@ function lageKurz() {
     const k = (pro[id] = pro[id] || { id: id, n: 0, arten: {}, letzte: null });
     k.n++;
     for (const a of x.arten || []) k.arten[a] = (k.arten[a] || 0) + 1;
-    if (x.zeit && (!k.letzte || x.zeit > k.letzte)) k.letzte = x.zeit;
+    const wann = x.zeit || x.gesehen;
+    if (wann && (!k.letzte || wann > k.letzte)) k.letzte = wann;
   }
   const liste = Object.values(pro).sort((p, q) => q.n - p.n);
   return '<div class="kurzlage"><div class="klk">LAGE — ' + fensterText() +
@@ -2717,7 +2744,8 @@ function zeigeSchauplatz(id) {
     ((x.arten || []).length
       ? x.arten.map((a) => ART_TEXT[a] || a).join(" · ")
       : "@" + x.konto) +
-    "<span>" + vorZeit(x.zeit) + "</span></div>" +
+    '<span class="' + (x.zeit ? "" : "geschaetzt") + '">' + zeitText(x) +
+    "</span></div>" +
     (x.ortname ? '<div class="eq">' + x.ortname + "</div>" : "") +
     '<div class="mt">' + String(x.text).replace(/[<>&]/g, "") + "</div>" +
     '<div class="eq">@' + x.konto + " · ungeprüft</div></div>";
