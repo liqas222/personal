@@ -43,6 +43,16 @@ function mercY(lat) {
   return Math.log(Math.tan(Math.PI / 4 + (l * Math.PI) / 180 / 2));
 }
 
+/* Rückwege. Begrenzungen müssen im projizierten Raum gerechnet werden:
+   dort ist der Massstab linear, in Gradzahlen ist er es nicht. */
+function invMercX(x) {
+  return (x * 180) / Math.PI;
+}
+
+function invMercY(y) {
+  return ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
+}
+
 /* Ein Ausschnitt (lon/lat-Rechteck) wird auf die Leinwand abgebildet.
    Beide Achsen bekommen denselben Massstab, damit nichts verzerrt. */
 function makeView(bbox, w, h) {

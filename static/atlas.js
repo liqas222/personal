@@ -3,6 +3,12 @@
 
 const WELT_BBOX = [-180, -58, 180, 80];
 
+/* Sichtbare Kennung der ausgelieferten Fassung, unten in der Statusleiste.
+   Ohne die lässt sich nicht unterscheiden, ob eine Änderung fehlt oder ob
+   der Browser noch die alte Datei aus seinem Zwischenspeicher zeigt — und
+   genau darüber haben wir schon zweimal aneinander vorbeigeredet. */
+const BAU = "2026-08-26 · 5";
+
 let cv, ctx, W = 0, H = 0, DPR = 1;
 let LAENDER = [];          // dekodierte Ringe mit vorberechneter Bounding-Box
 let view = null;           // aktuelle Projektion
@@ -152,6 +158,8 @@ function init() {
   });
   document.getElementById("weiter").onclick = naechsteFrage;
   document.getElementById("stand").textContent = STAND;
+  const bau = document.getElementById("lgBau");
+  if (bau) bau.textContent = BAU;
 
   holeLive();
   holeFeed();
@@ -2039,6 +2047,39 @@ function bboxAusRechteck(x0, y0, x1, y1) {
   return [a[0], b[1], b[0], a[1]];
 }
 
+/* Den Ausschnitt in der Welt halten.
+
+   Gerechnet wird im projizierten Raum, nicht in Gradzahlen: der Mercator-
+   Massstab ist in Grad nicht linear, und ein Versatz in Grad verschiebt oben
+   anders als am Äquator.
+
+   Wichtig ist ausserdem, WAS begrenzt wird. `view.bbox` ist der sichtbare
+   Bereich, aus dem Bildschirmrechteck zurückgerechnet — bei einer Leinwand,
+   die breiter ist als die Karte, ist er grösser als die Welt. Ein Versuch,
+   das in Gradzahlen zu begrenzen, hat deshalb beim Ziehen nach oben die
+   Spannweite auf 395 Grad aufgeblasen, statt anzuhalten.
+
+   Passt die Welt nicht ins Bild, wird mittig gesetzt — sonst am Rand
+   angehalten. In beiden Fällen verschoben statt verworfen, sonst klemmt das
+   Ziehen fest. */
+function begrenzeAufWelt(bbox) {
+  const [wW, wS, wO, wN] = WELT_BBOX;
+  const gx0 = mercX(wW), gx1 = mercX(wO);
+  const gyU = mercY(wS), gyO = mercY(wN);
+
+  let x0 = mercX(bbox[0]), x1 = mercX(bbox[2]);
+  let yU = mercY(bbox[1]), yO = mercY(bbox[3]);
+  const breit = x1 - x0, hoch = yO - yU;
+
+  if (breit >= gx1 - gx0) x0 = (gx0 + gx1) / 2 - breit / 2;
+  else x0 = Math.max(gx0, Math.min(gx1 - breit, x0));
+  if (hoch >= gyO - gyU) yU = (gyU + gyO) / 2 - hoch / 2;
+  else yU = Math.max(gyU, Math.min(gyO - hoch, yU));
+
+  return [invMercX(x0), invMercY(yU),
+          invMercX(x0 + breit), invMercY(yU + hoch)];
+}
+
 function setzeAusschnitt(bbox, vonHand) {
   const spanne = bbox[2] - bbox[0];
   const bisher = view.bbox[2] - view.bbox[0];
@@ -2054,17 +2095,7 @@ function setzeAusschnitt(bbox, vonHand) {
   // sich beliebig weit schieben; ab 360 Grad Versatz kam die Karte ein
   // zweites Mal ins Bild und man wusste nicht mehr, welches Russland man
   // vor sich hat. Verschoben statt verworfen — sonst klemmt das Ziehen.
-  if (spanne >= 360) {
-    bbox = [-180, bbox[1], -180 + spanne, bbox[3]];
-  } else if (bbox[0] < -180) {
-    bbox = [-180, bbox[1], -180 + spanne, bbox[3]];
-  } else if (bbox[2] > 180) {
-    bbox = [180 - spanne, bbox[1], 180, bbox[3]];
-  }
-  // Breitengrade begrenzen, statt die Bewegung zu verwerfen — sonst klemmt
-  // die Karte am Rand fest.
-  if (bbox[3] > 89) { const d = bbox[3] - 89; bbox = [bbox[0], bbox[1] - d, bbox[2], 89]; }
-  if (bbox[1] < -89) { const d = -89 - bbox[1]; bbox = [bbox[0], -89, bbox[2], bbox[3] + d]; }
+  bbox = begrenzeAufWelt(bbox);
   anim = null;
   ziel = null;
   view = makeView(bbox, W, H);

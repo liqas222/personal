@@ -35,9 +35,21 @@ Siehe `README.md` für Aufbau und Bedienung.
   Hauptlandmasse lag bei −333 bis −180. Gezeichnet wurde sie nur über die
   Versatzkopie — das Land erschien doppelt — und die Trefferprüfung suchte es
   am falschen Ort. `entwirre()` rückt den Ring am Ende wieder in die Mitte.
-- **Seitlich am Weltrand anhalten.** Ohne Begrenzung in `setzeAusschnitt()`
-  liess sich beliebig weit schieben, bis die Karte ein zweites Mal ins Bild
-  kam. Verschieben statt verwerfen, sonst klemmt das Ziehen.
+- **Am Weltrand anhalten — in BEIDEN Achsen und im projizierten Raum.**
+  `begrenzeAufWelt()`. Zwei Anläufe waren nötig: erst war nur die Länge
+  begrenzt (man konnte senkrecht komplett von der Karte scrollen), dann in
+  Gradzahlen — was die Spannweite beim Ziehen nach oben auf 395 Grad
+  aufblies. Der Mercator-Massstab ist in Grad nicht linear, und `view.bbox`
+  ist der aus dem Bildschirmrechteck zurückgerechnete sichtbare Bereich,
+  nicht das, was man gesetzt hat. Passt die Welt nicht ins Bild: mittig
+  setzen. Sonst am Rand anhalten — verschieben, nie verwerfen, sonst klemmt
+  das Ziehen fest.
+- **Bedienungsfehler mit echten Maus- und Radereignissen prüfen**, nicht
+  durch Aufrufen der Funktionen. Die Begrenzung sah in einem Funktionstest
+  gut aus und war beim Ziehen trotzdem kaputt.
+- **`BAU` in der Statusleiste hochzählen**, wenn etwas ausgeliefert wird.
+  Ohne sichtbare Kennung lässt sich nicht unterscheiden, ob eine Änderung
+  fehlt oder ob der Browser die alte Datei aus dem Zwischenspeicher zeigt.
 - **Leinwand nach jedem Moduswechsel neu messen.** Panel und Quizleiste ändern
   die Grösse des Kartenfelds; ohne `resize()` behält der Canvas seine alte Höhe
   und überdeckt, was darunter eingeblendet wird.
