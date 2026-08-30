@@ -1,10 +1,15 @@
 /* Handelsprofile der Länder.
 
+   SEIT DIE WTO-ZAHLEN DA SIND: Die Prozentzahlen stehen in `wto.js`
+   (erzeugt aus WTO Trade Profiles 2023, siehe tools/wto_lesen.py) — dort
+   Anteile je Partnerland, Warengruppen und Handelsvolumen für 197
+   Volkswirtschaften. Diese Datei bleibt daneben bestehen für das, was die
+   WTO nicht liefert: die deutschen Namen, den erklärenden Satz je Land
+   (`kern`) und die Zuordnung zu den Meerengen (`engen`).
+
    ZUR EINORDNUNG: Hier stehen **Warenstrukturen in Rangfolge**, keine
-   Prozentzahlen. Das ist Absicht. Belastbare bilaterale Handelszahlen für
-   jedes Land habe ich nicht vorliegen, und erfundene Zahlen wären schlimmer
-   als keine. Die Rangfolge der Warengruppen und die Hauptpartner sind dagegen
-   stabil und gut belegt.
+   Prozentzahlen — die kommen aus wto.js. Die Rangfolge der Warengruppen und
+   die Hauptpartner sind stabil und gut belegt.
 
    Grundlage: Warenstruktur nach UN Comtrade / Observatory of Economic
    Complexity, Grössenordnung 2022–2024. Wer eine Zahl braucht, schlägt sie

@@ -7,7 +7,7 @@ const WELT_BBOX = [-180, -58, 180, 80];
    Ohne die lässt sich nicht unterscheiden, ob eine Änderung fehlt oder ob
    der Browser noch die alte Datei aus seinem Zwischenspeicher zeigt — und
    genau darüber haben wir schon zweimal aneinander vorbeigeredet. */
-const BAU = "2026-08-26 · 6";
+const BAU = "2026-08-30 · 7";
 
 let cv, ctx, W = 0, H = 0, DPR = 1;
 let LAENDER = [];          // dekodierte Ringe mit vorberechneter Bounding-Box
@@ -1293,22 +1293,50 @@ function zeichneBetroffenBoegen(e, now) {
   }
 }
 
-/* Bögen von den ausgewählten Ländern zu ihren Handelspartnern. */
+/* Die Handelspartner eines Landes, mit Anteil in Prozent, wo die WTO ihn
+   ausweist. Ohne Zahlen bleibt die kuratierte Liste aus handel.js — dann
+   aber ohne Prozentangabe, statt eine zu erfinden. */
+function partnerVon(name) {
+  const w = WTO[name];
+  if (w && (w.pAus || w.pEin)) {
+    return {
+      quelle: "wto",
+      jahr: w.pJahr,
+      aus: (w.pAus || []).map((x) => ({ l: x.l, p: x.p })),
+      ein: (w.pEin || []).map((x) => ({ l: x.l, p: x.p })),
+      restAus: w.restAus, restEin: w.restEin,
+    };
+  }
+  const h = HANDEL[name];
+  if (!h) return null;
+  return {
+    quelle: "liste",
+    aus: h.pAus.map((l) => ({ l: l })),
+    ein: h.pEin.map((l) => ({ l: l })),
+  };
+}
+
+/* Bögen von den ausgewählten Ländern zu ihren Handelspartnern.
+
+   Die Stärke der Linie folgt dem Anteil: 20 Prozent des Aussenhandels
+   sollen anders aussehen als 3. Ohne Zahl bleibt sie dünn und gleichmässig
+   — eine dicke Linie ohne Beleg wäre eine Behauptung. */
 function zeichneAuswahlBoegen(now) {
   let k = 0;
   for (const name of AUSWAHL) {
-    const h = HANDEL[name];
+    const pa = partnerVon(name);
     const m = landMitte(name);
-    if (!h || !m) continue;
-    for (const p of h.pAus) {
-      const z = landMitte(p);
+    if (!pa || !m) continue;
+    const staerke = (x) => x.p ? 1.2 + Math.min(x.p, 60) / 12 : 2;
+    for (const x of pa.aus) {
+      const z = landMitte(x.l);
       if (z) zeichneBogen(m, z, ROLLEN.ausfuhr.c,
-        { now: now, phase: (k++ * 0.17) % 1, breite: 2 });
+        { now: now, phase: (k++ * 0.17) % 1, breite: staerke(x) });
     }
-    for (const p of h.pEin) {
-      const z = landMitte(p);
+    for (const x of pa.ein) {
+      const z = landMitte(x.l);
       if (z) zeichneBogen(z, m, ROLLEN.einfuhr.c,
-        { now: now, phase: (k++ * 0.17) % 1, breite: 2, hoehe: 0.78 });
+        { now: now, phase: (k++ * 0.17) % 1, breite: staerke(x), hoehe: 0.78 });
     }
   }
   // Die Partnerländer beschriften. Ohne Namen an den Enden ist eine Linie
@@ -1319,13 +1347,21 @@ function zeichneAuswahlBoegen(now) {
   // als Abnehmer und einmal als Lieferant.
   const rollen = {};
   for (const name of AUSWAHL) {
-    const h = HANDEL[name];
-    if (!h) continue;
-    for (const p of h.pAus) {
-      if (!AUSWAHL.has(p)) (rollen[p] = rollen[p] || {}).aus = true;
+    const pa = partnerVon(name);
+    if (!pa) continue;
+    for (const x of pa.aus) {
+      if (!AUSWAHL.has(x.l)) {
+        const r = (rollen[x.l] = rollen[x.l] || {});
+        r.aus = true;
+        if (x.p) r.pAus = Math.max(r.pAus || 0, x.p);
+      }
     }
-    for (const p of h.pEin) {
-      if (!AUSWAHL.has(p)) (rollen[p] = rollen[p] || {}).ein = true;
+    for (const x of pa.ein) {
+      if (!AUSWAHL.has(x.l)) {
+        const r = (rollen[x.l] = rollen[x.l] || {});
+        r.ein = true;
+        if (x.p) r.pEin = Math.max(r.pEin || 0, x.p);
+      }
     }
   }
   for (const [p, r] of Object.entries(rollen)) {
@@ -1340,8 +1376,14 @@ function zeichneAuswahlBoegen(now) {
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillStyle = farbe;
-    halo(((HANDEL[p] && HANDEL[p].t) || p).toUpperCase() +
-      (beides ? " \u21c4" : r.aus ? " \u2190" : " \u2192"), x, y + 8);
+    const pfeil = beides ? " \u21c4" : r.aus ? " \u2190" : " \u2192";
+    // Prozentzahl direkt an die Linie. Ohne sie sagt der Bogen nur "ist
+    // Partner", und genau das war die Kritik.
+    const anteil = beides
+      ? (r.pAus ? " " + zahl1(r.pAus) + "/" + zahl1(r.pEin) + " %" : "")
+      : (r.aus ? r.pAus : r.pEin) ? " " + zahl1(r.aus ? r.pAus : r.pEin) + " %" : "";
+    halo(((HANDEL[p] && HANDEL[p].t) || p).toUpperCase() + pfeil + anteil,
+      x, y + 8);
     ctx.beginPath();
     ctx.arc(x, y, 3, 0, 7);
     ctx.fillStyle = farbe;
@@ -2314,6 +2356,12 @@ function malAuswahl() {
   }
 }
 
+/* Deutsche Zahl mit einer Nachkommastelle, ohne unnötige ",0". */
+function zahl1(v) {
+  if (v === undefined || v === null) return "?";
+  return (Math.round(v * 10) / 10).toString().replace(".", ",");
+}
+
 /* Was die Bögen bedeuten — direkt neben der Karte, nicht nur im Panel.
 
    Eine wichtige Ehrlichkeit steht hier mit drin: die Bögen sagen, DASS ein
@@ -2327,32 +2375,96 @@ function bauBogenlegende() {
   if (!el) return;
   if (!AUSWAHL.size) { el.innerHTML = ""; return; }
   const namen = [...AUSWAHL].map((n) => (HANDEL[n] && HANDEL[n].t) || n);
-  const mit = [...AUSWAHL].filter((n) => HANDEL[n]);
-  if (!mit.length) {
+  const mitZahlen = [...AUSWAHL].filter((n) => WTO[n] && WTO[n].pAus);
+  if (!mitZahlen.length && ![...AUSWAHL].some((n) => HANDEL[n])) {
     el.innerHTML = '<div class="bt2">LINIEN</div>' +
-      "Für " + namen.join(", ") + " liegt kein Handelsprofil vor — deshalb " +
+      "Für " + namen.join(", ") + " liegen keine Handelsdaten vor — deshalb " +
       "sind keine Linien gezeichnet.";
     return;
   }
-  const waren = mit.map((n) => {
-    const h = HANDEL[n];
-    return "<b>" + h.t + "</b> führt vor allem " + h.aus.slice(0, 3).join(", ") +
-      " aus und " + h.ein.slice(0, 3).join(", ") + " ein.";
-  }).join("<br>");
+  // Was die WTO nicht aufschlüsselt, gehört sichtbar dazu: bei
+  // Saudi-Arabien sind das 80 Prozent der Ausfuhr, und ohne diese Angabe
+  // liest sich der grösste genannte Abnehmer (5,1 %) als Hauptabnehmer.
+  const rest = mitZahlen.map((n) => {
+    const w = WTO[n];
+    const t = (HANDEL[n] && HANDEL[n].t) || n;
+    const teile = [];
+    if (w.restAus != null) teile.push(zahl1(w.restAus) + " % der Ausfuhr");
+    if (w.restEin != null) teile.push(zahl1(w.restEin) + " % der Einfuhr");
+    return teile.length
+      ? "<b>" + t + ":</b> " + teile.join(" und ") +
+        " schlüsselt die WTO nicht nach Ländern auf."
+      : "";
+  }).filter(Boolean).join("<br>");
+
+  const jahre = [...new Set(mitZahlen.map((n) => WTO[n].pJahr).filter(Boolean))];
+
   el.innerHTML =
-    '<div class="bt2">WAS DIE LINIEN ZEIGEN</div>' +
+    '<div class="bt2">ANTEIL AM WARENHANDEL</div>' +
     '<div class="bz"><span class="bl" style="border-color:' +
-    ROLLEN.ausfuhr.c + '"></span><span>Ausfuhr — ' + namen.join(", ") +
-    " liefert dorthin</span></div>" +
+    ROLLEN.ausfuhr.c + '"></span><span>Ausfuhr — Anteil am gesamten ' +
+    "Warenexport</span></div>" +
     '<div class="bz"><span class="bl" style="border-color:' +
-    ROLLEN.einfuhr.c + '"></span><span>Einfuhr — kommt von dort</span></div>' +
+    ROLLEN.einfuhr.c + '"></span><span>Einfuhr — Anteil am Warenimport' +
+    "</span></div>" +
     '<div class="bz"><span class="bl" style="border-color:#c9b06a"></span>' +
-    "<span>⇄ Partner in beide Richtungen</span></div>" +
-    '<div class="bw">' + waren +
-    "<br><br><b>Grenze:</b> Eine Linie sagt, dass das Land zu den " +
-    "Hauptpartnern zählt — nicht wie viel und nicht womit. Bilaterale " +
-    "Mengen liegen nicht belegt vor. Die Warengruppen oben sind der " +
-    "Gesamthandel des Landes, nicht der mit diesem Partner.</div>";
+    "<span>⇄ beides, Ausfuhr/Einfuhr</span></div>" +
+    '<div class="bw">Die Linienstärke folgt dem Anteil.' +
+    (rest ? "<br><br>" + rest : "") +
+    "<br><br><b>Die EU zählt als ein Partner</b> und wird deshalb nicht als " +
+    "Linie gezeichnet — im Panel steht sie mit ihrem Anteil." +
+    "<br><br>Quelle: WTO, Trade Profiles 2023" +
+    (jahre.length ? " · Anteile " + jahre.sort().join("/") : "") + "</div>";
+}
+
+/* Die WTO-Zahlen zu einem Land, als Block fürs Panel.
+
+   Hier stehen zum ersten Mal echte Anteile statt Rangfolgen. Zwei Dinge
+   müssen mitlaufen, sonst führen die Zahlen in die Irre:
+   das Bezugsjahr (es reicht von 2000 bis 2022, je nachdem, was das Land
+   gemeldet hat) und der Anteil, den die WTO nicht nach Ländern aufschlüsselt. */
+function wtoBlock(n) {
+  const w = WTO[n];
+  if (!w) {
+    return '<div class="hz"><span class="hk">Anteile</span>' +
+      '<span class="hv hinw">Für dieses Land führt die WTO kein Profil. ' +
+      "Oben stehen Warengruppen als Rangfolge, ohne Mengenangabe.</span></div>";
+  }
+  const zeile = (t, v) =>
+    '<div class="hz"><span class="hk">' + t + '</span><span class="hv">' +
+    v + "</span></div>";
+  const mio = (v) => v == null ? "nicht ausgewiesen"
+    : (v >= 1000 ? zahl1(v / 1000) + " Mrd." : Math.round(v) + " Mio.") + " US$";
+  const gruppen = (g) => !g ? "nicht ausgewiesen" :
+    [["Agrar", g.agrar], ["Brennstoffe/Bergbau", g.energie],
+     ["Industriegüter", g.industrie], ["Sonstige", g.sonst]]
+      .filter((x) => x[1] != null)
+      .map((x) => x[0] + " " + zahl1(x[1]) + " %").join(" · ");
+  const partner = (liste, rest) => !liste ? "nicht ausgewiesen" :
+    liste.map((x) => '<span class="pz">' +
+      ((HANDEL[x.l] && HANDEL[x.l].t) || x.l) + " <b>" + zahl1(x.p) +
+      " %</b></span>").join("") +
+    (rest != null ? '<span class="pz rest">nicht aufgeschlüsselt <b>' +
+      zahl1(rest) + " %</b></span>" : "");
+
+  return zeile("Warenausfuhr", mio(w.aus)) +
+    zeile("Wareneinfuhr", mio(w.ein)) +
+    zeile("Ausfuhr, Waren", gruppen(w.wAus)) +
+    zeile("Einfuhr, Waren", gruppen(w.wEin)) +
+    zeile("Geht nach", partner(w.pAus, w.restAus)) +
+    zeile("Kommt aus", partner(w.pEin, w.restEin)) +
+    (w.waren && w.waren.length
+      ? zeile("Grösste Posten", w.waren.slice(0, 5).map((x) =>
+          '<span class="pz">' + x.t + " <b>" + mio(x.v) + "</b></span>").join(""))
+      : "") +
+    '<div class="hz"><span class="hk"></span><span class="hv hinw">' +
+    "WTO, Trade Profiles 2023, S. " + w.seite +
+    (w.pJahr ? " · Länderanteile " + w.pJahr : "") +
+    (w.wJahr ? ", Warengruppen " + w.wJahr : "") + ". " +
+    "Die EU zählt als ein Partner. Anteile beziehen sich auf den " +
+    "Warenhandel des Landes insgesamt — welche Ware zu welchem Partner " +
+    "geht, weist die WTO nicht aus." +
+    "</span></div>";
 }
 
 function bauHandelPanel() {
@@ -2366,7 +2478,12 @@ function bauHandelPanel() {
     [...AUSWAHL].map((n) => {
       const h = HANDEL[n];
       if (!h) {
-        return '<div class="hbox"><h3>' + n + "</h3><p>" + HANDEL_FEHLT + "</p></div>";
+        // Kein kuratiertes Profil, aber vielleicht WTO-Zahlen: die decken
+        // 197 Volkswirtschaften ab, handel.js nur rund 45.
+        const w = WTO[n];
+        return '<div class="hbox"><h3>' + ((w && w.name) || n) + "</h3>" +
+          (w ? wtoBlock(n)
+             : "<p>" + HANDEL_FEHLT + "</p>") + "</div>";
       }
       // An welchen Engen hängt das Land, und wie stark?
       const engen = h.engen.map((id) => {
@@ -2382,13 +2499,7 @@ function bauHandelPanel() {
       return '<div class="hbox"><h3>' + h.t + "</h3>" +
         '<p class="kern">' + h.kern + "</p>" +
         liste("Führt aus", h.aus) + liste("Führt ein", h.ein) +
-        liste("Abnehmer (Linien hinaus)", namen(h.pAus)) +
-        liste("Lieferanten (Linien herein)", namen(h.pEin)) +
-        '<div class="hz"><span class="hk"></span><span class="hv hinw">' +
-        "Die Warengruppen oben sind der Gesamthandel des Landes. Welche " +
-        "Ware zu welchem Partner geht, steht hier bewusst nicht — dafür " +
-        "liegen keine belastbaren bilateralen Zahlen vor." +
-        "</span></div>" +
+        wtoBlock(n) +
         '<div class="hz"><span class="hk">Engpässe</span></div>' + engen +
         "</div>";
     }).join("") +

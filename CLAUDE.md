@@ -165,6 +165,23 @@ Siehe `README.md` für Aufbau und Bedienung.
   Karte. Und ausdrücklich dazu, was sie NICHT sagt: dass ein Land Hauptpartner
   ist, nicht wie viel und nicht womit. Die Warengruppen im Panel sind der
   Gesamthandel des Landes, nicht der mit diesem Partner.
+- **Echte Anteile stehen in `static/wto.js`** — erzeugt aus den WTO Trade
+  Profiles 2023 durch `tools/wto_lesen.py`, 197 Volkswirtschaften. Die Datei
+  wird **nicht von Hand gepflegt**; wer etwas ändern will, ändert das
+  Werkzeug und lässt es neu laufen.
+- **Bezugsjahr je Land mitführen.** Es ist nicht überall gleich: Japan 2022,
+  Saudi-Arabien 2021, einzelne Länder bis zurück zu 2000. Ein pauschales
+  „Stand 2022" wäre falsch.
+- **Den nicht aufgeschlüsselten Rest mitzeigen.** Bei Saudi-Arabien weist die
+  WTO 80,2 % der Ausfuhr als „Other" aus. Ohne diese Angabe liest sich der
+  grösste genannte Abnehmer (VAE, 5,1 %) als Hauptabnehmer — das wäre grob
+  irreführend.
+- **Die EU zählt bei der WTO als EIN Partner** und lässt sich nicht als Linie
+  auf ein Land zeichnen. Im Panel steht sie mit Anteil, auf der Karte nicht,
+  und die Legende sagt warum.
+- **`pypdf` ist eine Bau-Abhängigkeit, keine Laufzeit-Abhängigkeit.** Wie
+  `build_map.py`: läuft einmal beim Entwickeln, ausgeliefert wird nur die
+  erzeugte `.js`-Datei.
 - `ABHAENGIGKEIT` ist die eigentlich wertvolle Angabe (wie stark hängt ein
   Land an einer Enge). Jeder Eintrag nennt, worauf sich der Anteil bezieht,
   und einen Beleg. Wo nichts belegt ist, steht "Anteil nicht belegt".
