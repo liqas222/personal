@@ -1,8 +1,14 @@
-# Atlas — Meerengen der Weltpolitik
+# Atlas — Länder und Meerengen finden
 
-Lernwerkzeug für Geopolitik: Weltkarte mit den maritimen Nadelöhren, Zoom in
-die einzelne Meerenge mit Seewegen und Fakten, dazu ein Quiz zum Verorten.
+Lernwerkzeug für Geografie: Länderquiz auf der Weltkarte in drei Stufen, dazu
+ein Meerengen-Quiz, Weltkarte und Meerengen-Detailansicht als Nachschlagewerk.
 Siehe `README.md` für Aufbau und Bedienung.
+
+**Der Auslieferungsstand ruft nichts ab.** Kein Konto, kein Schlüssel, keine
+Hintergrundschleife. `serve.py` liefert Dateien aus und tut sonst nichts. Was
+einmal an Feed, Telegram, PortWatch und Lagebild dranhing, ist entfernt — wer
+es zurückholen will, findet es in der Git-Historie, aber nicht in diesem
+Stand.
 
 ## Grundsätze
 
@@ -16,8 +22,13 @@ Siehe `README.md` für Aufbau und Bedienung.
   Wer eine Meerenge ergänzt, fasst keinen Zeichencode an.
 - **Jede Zahl mit Quelle und Jahr.** Ohne Beleg kommt keine Mengenangabe rein.
   Wo die Datenlage dünn ist, wird das hingeschrieben statt geraten.
-- **Lagebilder veralten.** Das Feld `lage` ist im UI als schnell veraltend
-  markiert und hängt am Standdatum `STAND`. Geografie und Seewege bleiben.
+- **Lagebilder veralten.** Das Feld `lage` in `data.js` ist im UI als schnell
+  veraltend markiert und hängt am Standdatum `STAND`. Geografie und Seewege
+  bleiben.
+- **Nichts abrufen.** Der Auslieferungsstand hat keinen Netzverkehr nach
+  draussen. Wer eine Live-Quelle einbauen will, führt damit Ausfälle, Kosten
+  und eine Pflegeaufgabe ein — das war schon einmal da und wurde bewusst
+  entfernt.
 
 ## Fallstricke, die schon zugeschlagen haben
 
@@ -66,94 +77,34 @@ Siehe `README.md` für Aufbau und Bedienung.
 - **Nach jeder Änderung wirklich hinschauen.** `node --check` findet nur
   Syntaxfehler. Karten sind visuell — Screenshot machen und ansehen.
 
-## Lagebild-Ebenen
+## Länderquiz
 
-- Inhalte in `static/lagen.js`, Zeichnen in `atlas.js`, Schaltpult rechts.
-- **Nur offene Quellen, nur Kartenmassstab.** Bekannte Standorte benennen ist
-  in Ordnung; alles Feinkörnigere gehört nicht hinein.
-- **Statuseinstufungen sind Bewertung, keine Meldung** — und müssen im UI als
-  solche kenntlich bleiben, samt Datum.
-- **Der Status folgt den Zahlen, wo es Zahlen gibt.** `statusVon()` leitet aus
-  der Abweichung der Durchfahrten vom 60-Tage-Median einen eigenen Status ab
-  und nimmt den **schlechteren** von Zahl und Handbewertung; im Panel steht,
-  welcher gewonnen hat. Ein handgesetzter Status allein veraltet unbemerkt —
-  genau das war bei Hormuz der Fall.
-- **Zwischengespeicherte Live-Werte nie wegwerfen, wenn ein Abruf scheitert.**
-  Stattdessen "ABRUF GESTÖRT" dazuschreiben.
-- **Der Übungsvermerk neben dem Klassifizierungsbanner bleibt stehen.** Die
-  Aufmachung imitiert ein Verschlusssachen-Produkt; ohne den Vermerk wäre die
-  Seite ausserhalb des eigenen Bildschirms missverständlich.
-- Beim Zoomen die Theaterflächen dämpfen, sonst überdecken sie die Karte.
-
-## Meldungen und Kriegsschauplätze
-
-- **Nie an der Meerenge filtern.** Der Feed liess früher nur Texte durch, in
-  denen wörtlich eine Meerenge vorkam (`zuordnen(text) != []`). Damit fiel jede
-  Kriegsmeldung durch — ein Angriff auf Kiew nennt keine Meerenge. Genau daran
-  lag „gibt noch keine meldungen". Jetzt entscheidet `meldenswert()`:
-  Ereignisart **oder** Meerenge.
-- **Ein Ort, nicht eine Enge.** Ereignisse werden dort gezeichnet, wo sie
-  passiert sind (`b.ort` aus `ort_treffer()`), Enge nur als Rückfall. Vorher
-  sass ein Angriff auf Odessa am Bosporus.
-- **Ortsnamen brauchen Wortgrenzen.** Ohne `\b` steckt „mali" in „Somalia" und
-  „oman" in „Roman". Gilt für `ORTE`, `VON_WORTE` und `NACH_WORTE`.
-- **Zeitangaben vereinheitlichen.** RSS liefert RFC-822, Atom ISO, die
-  Telegram-Vorschau etwas Drittes. Ungemischt sortiert nichts und ein
-  24-Stunden-Fenster lässt sich gar nicht erst bilden — `zeit_normieren()`.
-- **Alle Quellenpfade durch `anreichern()`.** Bot, Kanalvorschau, RSS und HTML
-  haben das früher je für sich gemacht; der Bot-Pfad hat `arten` und `bahn`
-  schlicht vergessen und seine Meldungen waren auf der Karte unsichtbar.
-- **Die Kacheln zählen Meldungen, nicht Ereignisse.** Zwei Kanäle über denselben
-  Angriff ergeben zwei Meldungen. Der Vergleich mit dem Vortag ist belastbar,
-  die absolute Zahl nicht — und das steht im UI auch so da.
-- **Der Kachelstatus folgt den Zahlen** (`lageStatus()`), nie von Hand gesetzt.
-- **Startbild ist die Karte**, die Kurzlage steht daneben im Panel. Das
-  Kachel-Lagebild ist ein eigener Modus, nicht der Einstieg.
-- **Standardquellen laufen, solange nichts Eigenes eingetragen ist**
-  (`web_quellen()`). Sonst steht der Monitor beim ersten Start leer da und man
-  weiss nicht, ob er überhaupt etwas tut. Eigene Adressen ersetzen die Liste
-  vollständig — kein Mischen, das wäre nicht durchschaubar.
-- **Die Standardquellen sind ungeprüft** und als solche gekennzeichnet. Aus
-  dieser Sandbox ist das offene Netz nicht erreichbar; ob ein Feed noch lebt,
-  sagt nur der Prüfknopf auf dem Zielrechner. Tote Feeds müssen dort
-  namentlich gemeldet werden, nie stillschweigend nichts liefern.
-- **Wer den Server hier lokal testet**, braucht `NO_PROXY=127.0.0.1` und muss
-  wissen, dass der erste `hole_feed()`-Lauf startet, bevor der eigene Socket
-  lauscht — eine Stub-Quelle auf demselben Server geht im ersten Zyklus leer aus.
-
-## Anklicken und Zeitfenster
-
-- **Punkt-in-Fläche allein reicht als Trefferprüfung nicht.** 38 der 245
-  Länder sind bei Weltzoom kleiner als ein Pixel — Singapur, Malta, Monaco,
-  die Malediven. Erst exakt prüfen, dann `landNahe()` im Umkreis von 12 px.
-- **Bei mehreren Treffern gewinnt das kleinste Land**, nicht das erste in der
-  Liste. Sonst schnappt Österreich jeden Klick auf Liechtenstein weg, und
-  Heranzoomen hilft nicht — an der Reihenfolge ändert Zoom nichts.
-- **Die Datumsgrenze trifft auch die Trefferprüfung.** Die Ringe sind
-  entwirrt und laufen über ±180 hinaus, der Klick kommt normiert an. Ohne
-  `lon ± 360` war Russlands Pazifikküste nicht anklickbar.
-- **Ereignisse brauchen ein Zeitfenster.** Ohne das stand jede Meldung für
-  immer auf der Karte. Alles, was filtert, geht durch `beitraegeImFenster()`
-  — Karte, Bahnen, Alarme, Ebenenzähler, Statuszeile, Kurzlage. Wer eine
-  neue Anzeige baut und `FEED.beitraege` direkt liest, baut den Fehler nach.
-- **Nur eine Zahl fürs selbe.** Die Kurzlage rechnet aus dem Zeitfenster, nicht
-  aus `/api/lage` — sonst stand dort „letzte 24 Std." während oben eine Woche
-  gewählt war.
-- **Nicht jede Quelle liefert eine Zeit.** Der HTML-Notpfad (eine Seite ohne
-  RSS) hat gar keine, manche Feeds ein unlesbares Datum. Solche Meldungen
-  fielen aus jedem Fenster ausser „ALLES" — der Monitor sah leer aus, obwohl
-  Meldungen da waren. Ersatzweise gilt `gesehen`: wann der Server sie zuerst
-  gesehen hat. **Nie als Ereigniszeit ausgeben** — im UI heisst es „erstmals
-  gesehen", amber gesetzt, mit dem Hinweis, dass es der Abruf ist und nicht
-  das Ereignis. Filtern und sortieren über `wann()` bzw. `zeitVon()`.
-- **`gesehen` muss den Abruf überleben.** Sonst gilt eine bekannte Meldung in
-  jedem Zyklus wieder als frisch und wandert im Zeitfenster nach vorn.
-- **Kennungen mit `hashlib`, nie mit `hash()`.** Das eingebaute `hash()` ist
-  in Python pro Prozess zufällig gesalzen: nach jedem Neustart bekam dieselbe
-  Meldung eine neue Kennung und stand ein zweites Mal im Feed.
-- **Wo ein Ereignissymbol landet, ergibt sich erst beim Zeichnen** (Auffächerung
-  um den Ort). Deshalb wird die Bildschirmposition in `EREIGNIS_TREFFER`
-  mitgeschrieben — anders ist es nicht anklickbar.
+- **Die Kartendaten enthalten 245 Einträge, aber keine 245 Länder.** Darunter
+  sind Militärstützpunkte (Akrotiri, Guantanamo), eine UN-Pufferzone, ein
+  Gletscher, ein Weltraumbahnhof und rund fünfzig abhängige Gebiete. Was
+  gefragt werden darf, steht ausdrücklich in `static/laender.js`;
+  `tools/pruefe_laender.js` prüft, dass jeder Karteneintrag eingeordnet ist
+  und jeder Schlüssel existiert. Nach jeder Änderung laufen lassen.
+- **Die Hover-Fläche wird im Quiz NICHT beschriftet.** Der Name stünde sonst
+  als Lösung unter dem Mauszeiger und das Spiel wäre wertlos. Hervorhebung
+  ja, Name erst nach dem Klick — siehe `zeichneHover()`.
+- **Schwierigkeit wird abgeleitet, nicht gesetzt** (`bauRangliste()`): aus der
+  tatsächlichen Polygonfläche und dem BIP.
+- **Über Ränge rechnen, nicht über Rohwerte.** Quadratgrad gegen Milliarden
+  Dollar lässt sich nicht addieren, und Russland verzieht jede lineare Skala.
+- **Fehlendes BIP heisst nicht „winzige Volkswirtschaft".** Die WTO führt
+  Kuba, Nordkorea und Somalia nicht. Mit einer Null landeten sie zwischen
+  Nauru und Monaco unter den schwersten Ländern. Fehlt der Wert, zählt die
+  Fläche doppelt.
+- **`flaeche` und `echteFlaeche` nicht verwechseln.** Ersteres ist die Summe
+  der Umschliessungsrechtecke und entscheidet bei Enklaven, wer einen Klick
+  gewinnt. Letzteres ist die echte Polygonfläche und geht in die
+  Schwierigkeit ein — dort wäre das Rechteck irreführend, weil Indonesien ein
+  riesiges Rechteck aufspannt und doch aus Inseln besteht.
+- **Zwergstaaten brauchen den Vorabzoom.** 49 Länder sind bei Weltzoom kleiner
+  als ein Pixel. Ohne Zoom ist die Frage nicht schwer, sondern unfair.
+- **`[hidden]` allein blendet nichts aus**, wenn eine `display`-Regel
+  danebensteht — dann braucht es `#id[hidden]{display:none}`.
 
 ## Handel und Abhängigkeit
 

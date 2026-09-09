@@ -23,12 +23,6 @@ body{margin:0;background:var(--bg);color:var(--ink);
 /* Klassifizierungsbanner oben und unten — Stilelement. Der Übungsvermerk
    steht bewusst daneben: die Karte darf nicht mit einem echten
    Verschlusssachen-Produkt verwechselbar sein. */
-.klass{flex:none;background:#0b1f14;color:var(--phos);text-align:center;
-  font-size:11px;letter-spacing:2.5px;padding:4px 10px;font-weight:700;
-  border-bottom:1px solid #17402a;display:flex;justify-content:center;gap:16px}
-.klass .uebung{color:var(--amber);letter-spacing:1.5px}
-.klass.unten{border-bottom:0;border-top:1px solid #17402a}
-
 header{display:flex;align-items:center;gap:18px;padding:9px 14px;
   border-bottom:1px solid var(--rand);background:#070b10;flex:none;
   box-shadow:0 1px 0 #0d2a1c}
@@ -47,12 +41,6 @@ header .rechts{margin-left:auto;color:var(--dim);font-size:10px;text-align:right
   letter-spacing:1px}
 /* Deutlich sichtbarer Knopf ganz rechts. Als kleines graues Symbol mitten
    in der Leiste war er faktisch unsichtbar. */
-#zahnrad{color:var(--phos);text-decoration:none;font-size:11px;
-  letter-spacing:1.5px;padding:6px 12px;border:1px solid var(--phos);
-  background:#0d2318;white-space:nowrap;flex:none}
-#zahnrad:hover{background:var(--phos);color:#04100a;font-weight:700}
-header .zeit{color:var(--amber);font-size:13px;letter-spacing:2px;font-weight:700}
-
 main{flex:1;display:flex;min-height:0}
 #kartenfeld{flex:1;position:relative;min-width:0;overflow:hidden}
 canvas{display:block}
@@ -116,30 +104,9 @@ body[data-modus="detail"][data-frei="ja"] #zuruecksetzen{left:auto;right:280px;t
   font-size:9px;letter-spacing:2px;flex:none;border-right:1px solid var(--rand)}
 #leiste .lb.re{margin-left:auto;border-right:0;border-left:1px solid var(--rand);
   color:var(--phos)}
-#ebenen{display:flex;flex:1 1 auto;flex-wrap:wrap;min-width:0}
-#ebenen .zeile{display:flex;align-items:center;gap:8px;padding:7px 13px;
-  cursor:pointer;user-select:none;color:var(--dim);letter-spacing:1px;
-  font-size:10px;border-right:1px solid #101c18;white-space:nowrap;
-  transition:background .12s}
-#ebenen .zeile:hover{background:#0c1712;color:var(--ink)}
-#ebenen .zeile.an{color:var(--ink);background:#0b1710}
 /* Der Schalter selbst — kleine Leuchtdiode */
-#ebenen .sw{width:9px;height:9px;flex:none;border:1px solid #2a4a3c;
-  background:#0a1310;transition:all .14s}
-#ebenen .zeile.an .sw{border-color:currentColor;background:currentColor;
-  box-shadow:0 0 8px currentColor}
-#ebenen .anz{color:var(--dim);font-size:9px}
-#ebenen .kopf,#ebenen .fuss{display:none}
-body[data-modus="quiz"] #leiste{display:none}
 
 /* Legende der Statusfarben */
-#statuslegende{position:absolute;bottom:14px;right:14px;
-  background:#060a0ee8;backdrop-filter:blur(8px);border:1px solid #1c3a2e;
-  padding:9px 12px;font-size:10px;letter-spacing:1px;color:var(--dim)}
-#statuslegende .z{display:flex;align-items:center;gap:8px;margin-bottom:4px}
-#statuslegende .z:last-child{margin-bottom:0}
-#statuslegende i{width:9px;height:9px;flex:none;border-radius:50%}
-body:not([data-modus="welt"]) #statuslegende{display:none}
 
 /* Auswahlleiste */
 /* Erklärt die Bögen zu den Handelspartnern. Ohne sie sieht man nur Linien
@@ -274,43 +241,18 @@ ul.q li{margin-bottom:5px}
 #lage .rechts{margin-left:auto;border-right:0;border-left:1px solid var(--rand);
   color:var(--dim)}
 
-/* Quiz */
-#quizleiste{display:none;align-items:center;gap:16px;padding:12px 18px;
-  border-top:1px solid var(--rand);background:#0a0e15;flex:none}
-#qfrage{font-size:16px;font-weight:600}
-#qhilfe,#qergebnis{font-size:13px;color:var(--ink2)}
-#qergebnis.gut{color:var(--gruen)}
-#qergebnis.ok{color:#e0a03a}
-#qergebnis.schlecht{color:var(--rot)}
-#quizleiste .rechts{margin-left:auto;display:flex;align-items:center;gap:14px}
-#qpunkte{color:var(--dim);font-size:12px;letter-spacing:1px}
-#weiter{background:var(--blau);border:0;color:#fff;padding:8px 18px;
-  border-radius:6px;cursor:pointer;font:inherit;font-weight:600}
-
 /* Was in welchem Modus sichtbar ist */
 /* Die Meldungsspalte bleibt stehen — sie ist der Normalzustand, nicht die
    Ausnahme. Nur im Listen- und Quizmodus tritt sie zurück. */
 body[data-modus="quiz"] #panel,
-body[data-modus="liste"] #panel,
-body[data-modus="lage"] #panel{display:none}
-body[data-modus="liste"] #kartenfeld,
-body[data-modus="lage"] #kartenfeld{display:none}
+body[data-modus="liste"] #panel{display:none}
+body[data-modus="liste"] #kartenfeld{display:none}
 body[data-modus="liste"] #liste{display:grid;flex:1}
-body[data-modus="lage"] #kacheln{display:block;flex:1}
-body[data-modus="lage"] #leiste{display:none}
-body[data-modus="quiz"] #quizleiste{display:flex}
+body[data-modus="quiz"] #quizleiste{display:block}
+body:not([data-modus="quiz"]) #leiste{display:none}
 body:not([data-modus="detail"]) #zurueck{display:none}
 body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none}
 
-/* Zeitraumwahl. Steht links in der Leiste, vor den Ebenen: was man sieht,
-   hängt zuerst am Zeitraum und erst dann an den Ebenen. */
-#fenster{display:flex;gap:4px;flex:none;align-items:center;padding:5px 10px}
-.fb{background:#0a1219;border:1px solid var(--rand);color:var(--ink2);
-  padding:3px 9px;border-radius:4px;cursor:pointer;font:inherit;font-size:10px;
-  letter-spacing:.08em;white-space:nowrap}
-.fb:hover{border-color:var(--ink2);color:var(--ink)}
-.fb.an{background:#0d2318;border-color:var(--phos);color:var(--phos);
-  font-weight:700}
 .lb.tr{border-left:1px solid var(--rand);padding-left:12px;margin-left:8px}
 
 /* Ereignis-Einzelansicht im Panel */
@@ -360,52 +302,41 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 .klf{padding:5px 9px;color:var(--dim);font-size:10px;line-height:1.5}
 
 /* Lagebild — Kachel je Kriegsschauplatz. */
-#kacheln{display:none;overflow-y:auto;padding:14px 16px 24px}
-.lagekopf{border-bottom:1px solid var(--rand);padding-bottom:8px;
-  margin-bottom:14px;color:var(--ink2);font-size:11px;letter-spacing:.06em}
-.lagekopf b{color:var(--phos)}
-.lagekopf .warn{color:var(--amber)}
-.lagenote{margin-top:6px;color:var(--dim);letter-spacing:0;line-height:1.6;
-  max-width:78ch;text-transform:none}
-.lagenote b{color:var(--ink2)}
-.kachelgitter{display:grid;gap:12px;
-  grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
-.kachel{text-align:left;background:var(--panel);border:1px solid var(--rand);
-  border-radius:8px;padding:12px 13px;color:var(--ink);font:inherit;
-  cursor:pointer;display:flex;flex-direction:column;gap:8px}
-.kachel:hover{border-color:var(--phos);background:#0c141b}
-.kk{display:flex;align-items:center;gap:8px}
-.kn{font-weight:700;font-size:12.5px;flex:1}
-.kz{font-size:19px;font-weight:700;color:var(--ink2);line-height:1}
-.led{width:9px;height:9px;border-radius:50%;flex:none}
-.led.rot{background:var(--blut);box-shadow:0 0 8px var(--blut)}
-.led.amber{background:var(--amber);box-shadow:0 0 8px var(--amber)}
-.led.gruen{background:var(--phos);box-shadow:0 0 8px var(--phos)}
-.led.still{background:#2b3a40}
-.ks{color:var(--ink2);font-size:11.5px;line-height:1.6}
-.kt{color:var(--dim);font-size:10.5px;text-transform:uppercase;
-  letter-spacing:.08em}
-.kbs{display:flex;flex-direction:column;gap:6px;
-  border-top:1px solid var(--rand);padding-top:8px}
-.kb{font-size:11px;line-height:1.5}
-.kba{color:#ff8a8a;font-weight:700}
-.kbo{color:var(--amber);margin-left:6px;text-transform:capitalize}
-.kbz{color:var(--dim);margin-left:6px}
-.kbt{color:var(--ink2);opacity:.8;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  overflow:hidden}
-.kbleer{color:var(--dim);font-size:11px}
-.ke{color:var(--dim);font-size:10.5px;border-top:1px solid var(--rand);
-  padding-top:7px}
-.symlegende{margin-top:18px;padding-top:12px;border-top:1px solid var(--rand);
-  color:var(--ink2);font-size:11px;display:flex;flex-wrap:wrap;
-  align-items:center;gap:14px}
-.symlegende b{color:var(--dim);letter-spacing:.08em;width:100%}
-.sl{display:flex;align-items:center;gap:4px}
-.worum{background:#0c141b;border:1px solid var(--rand);border-radius:6px;
-  padding:10px 11px;margin-bottom:12px;font-size:11.5px;line-height:1.65}
-.worum b{color:var(--phos);letter-spacing:.06em}
-.worum p{margin:6px 0 0;color:var(--ink2)}
+/* Quiz-Bedienung */
+#quizart,#stufen{display:flex;gap:4px;align-items:center;padding:5px 10px}
+/* [hidden] allein reicht nicht — die display-Regel darüber gewinnt sonst. */
+#stufen[hidden],#leiste .lb[hidden]{display:none}
+.qa,.sb{background:#0a1219;border:1px solid var(--rand);color:var(--ink2);
+  padding:4px 11px;border-radius:4px;cursor:pointer;font:inherit;font-size:10px;
+  letter-spacing:.1em;white-space:nowrap}
+.qa:hover,.sb:hover{border-color:var(--ink2);color:var(--ink)}
+.qa.an,.sb.an{background:#0d2318;border-color:var(--phos);color:var(--phos);
+  font-weight:700}
+.sb span{color:var(--dim);font-weight:400;margin-left:3px}
+.sb.an span{color:var(--phos);opacity:.7}
+
+#quizleiste{display:none;flex:none;background:#070b10;
+  border-top:1px solid var(--rand);padding:10px 16px}
+.qzeile{display:flex;align-items:baseline;gap:14px}
+.qlabel{color:var(--dim);font-size:9px;letter-spacing:2px;flex:none}
+#qfrage{font-size:19px;font-weight:700;color:var(--phos);letter-spacing:1px;
+  flex:none}
+#qhilfe{color:var(--dim);font-size:11px}
+#qergebnis{font-size:12px;font-weight:700}
+#qergebnis.gut{color:var(--phos)}
+#qergebnis.ok{color:var(--amber)}
+#qergebnis.schlecht{color:#ff6b6b}
+.qzeile .rechts{margin-left:auto;display:flex;align-items:center;gap:12px;
+  flex:none}
+#qpunkte{color:var(--ink2);font-size:12px;font-weight:700}
+#weiter{background:#0d2318;border:1px solid var(--phos);color:var(--phos);
+  padding:5px 16px;border-radius:4px;cursor:pointer;font:inherit;font-size:11px;
+  letter-spacing:1px}
+#weiter:hover{background:#143623}
+#qinfo{margin-top:8px;padding-top:8px;border-top:1px solid var(--rand);
+  color:var(--ink2);font-size:11px;line-height:1.6}
+#qinfo b{color:var(--ink)}
+#qinfo .q{color:var(--dim);font-size:10px;margin-left:8px}
 
 @media (max-width:900px){
   #panel{position:absolute;inset:auto 0 0 0;width:auto;height:52%;
@@ -414,34 +345,29 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 }
 </style>
 </head>
-<body data-modus="welt">
-
-<div class="klass">
-  <span>GEHEIM // REL USA, GBR, AUS, CAN, NZL // NOFORN</span>
-  <span class="uebung">◆ ÜBUNGSLAGE — OFFENE QUELLEN — KEINE VERSCHLUSSSACHE</span>
-</div>
+<body data-modus="quiz">
 
 <header>
-  <div class="logo"><b>◈</b> ATLAS // JOC</div>
+  <div class="logo"><b>◈</b> ATLAS</div>
   <nav>
-    <button data-modus="welt" class="an">Lagekarte</button>
-    <button data-modus="lage">Lagebild</button>
+    <button data-modus="quiz" class="an">Länder finden</button>
+    <button data-modus="welt">Weltkarte</button>
     <button data-modus="liste">Meerengen</button>
-    <button data-modus="quiz">Drill</button>
   </nav>
   <div class="rechts">
-    <div class="zeit" id="zeit">04 AUG 2026 // 15:51Z</div>
-    <span id="stand"></span> · Natural Earth (Public Domain)
+    <span id="stand"></span> · Natural Earth (Public Domain) ·
+    Handel: WTO Trade Profiles 2023
   </div>
-  <a id="zahnrad" href="einstellungen" title="Telegram-Kanäle und Zugänge">⚙ ZUGÄNGE</a>
 </header>
 
 <div id="leiste">
-  <span class="lb">ZEITRAUM</span>
-  <div id="fenster"></div>
-  <span class="lb tr">EBENEN</span>
-  <div id="ebenen"></div>
-  <span class="lb re" id="ebZahl2"></span>
+  <span class="lb">QUIZ</span>
+  <div id="quizart">
+    <button class="qa an" data-q="land">LÄNDER</button>
+    <button class="qa" data-q="enge">MEERENGEN</button>
+  </div>
+  <span class="lb tr">STUFE</span>
+  <div id="stufen"></div>
 </div>
 
 <main>
@@ -456,13 +382,11 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
     <button id="zuruecksetzen" title="Taste 0">⟲ ÜBERSICHT</button>
     <div id="hinweis">
       <b>ZIEHEN</b> verschieben · <b>MAUSRAD</b> zoomen ·
-      <b>LAND</b> anklicken für Handelsprofil · <b>MARKER</b> für die Meerenge
+      <b>LAND</b> anklicken für das Handelsprofil · <b>MARKER</b> für die Meerenge
     </div>
-    <div id="statuslegende"></div>
     <div id="bogenlegende"></div>
     <div id="auswahl"></div>
   </div>
-  <div id="kacheln"></div>
   <div id="liste"></div>
   <aside id="panel">
     <div class="pkopf">
@@ -474,42 +398,34 @@ body[data-modus="detail"] #hinweis,body[data-modus="quiz"] #hinweis{display:none
 </main>
 
 <div id="quizleiste">
-  <span id="qfrage"></span>
-  <span id="qhilfe"></span>
-  <span id="qergebnis"></span>
-  <div class="rechts">
-    <span id="qpunkte"></span>
-    <button id="weiter" hidden>Weiter</button>
+  <div class="qzeile">
+    <span class="qlabel">WO LIEGT</span>
+    <span id="qfrage"></span>
+    <span id="qhilfe"></span>
+    <span id="qergebnis"></span>
+    <div class="rechts">
+      <span id="qpunkte"></span>
+      <button id="weiter" hidden>Weiter</button>
+    </div>
   </div>
+  <div id="qinfo" hidden></div>
 </div>
 
 <div id="lage">
-  <div class="f"><span class="pkt" style="background:var(--amber);
-    box-shadow:0 0 8px var(--amber)"></span>GLOBALE BEDROHUNGSSTUFE:
-    <b class="warn" style="color:var(--amber)">ERHÖHT</b></div>
-  <div class="f">AKTIVE THEATER: <b id="lgTheater">4</b></div>
-  <div class="f krit">CHOKEPOINT STATUS: <b>KRITISCH</b></div>
-  <div class="f">EBENEN AKTIV: <b id="lgEbenen">2 / 6</b></div>
-  <div class="f" title="Tägliche Durchfahrten je Meerenge">LIVE:
-    <span id="lgLive"><b style="color:var(--dim)">…</b></span></div>
-  <div class="f" title="Verfolgte X-Konten">MELDUNGEN:
-    <span id="lgFeed"><b style="color:var(--dim)">…</b></span></div>
+  <div class="f">LÄNDER IM QUIZ: <b id="lgAnzahl">–</b></div>
+  <div class="f">STUFE: <b id="lgStufe">–</b></div>
+  <div class="f">TREFFER: <b id="lgPunkte">–</b></div>
   <div class="f">STAND: <b id="lgBau">?</b></div>
-  <div class="f rechts">QUELLE: OFFEN · BEWERTUNG, KEINE MELDUNG</div>
+  <div class="f rechts">Karte: Natural Earth · Handelszahlen: WTO 2023</div>
 </div>
-
-<div class="klass unten">
-  <span>GEHEIM // REL USA, GBR, AUS, CAN, NZL // NOFORN</span>
-  <span class="uebung">◆ ÜBUNGSLAGE — NICHT ZUR LAGEBEURTEILUNG</span>
 </div>
 
 <script src="world.js"></script>
 <script src="geo.js"></script>
 <script src="data.js"></script>
-<script src="lagen.js"></script>
 <script src="handel.js"></script>
+<script src="laender.js"></script>
 <script src="wto.js"></script>
-<script src="schauplaetze.js"></script>
 <script src="atlas.js"></script>
 </body>
 </html>

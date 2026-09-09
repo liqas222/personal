@@ -7,7 +7,7 @@ const WELT_BBOX = [-180, -58, 180, 80];
    Ohne die lässt sich nicht unterscheiden, ob eine Änderung fehlt oder ob
    der Browser noch die alte Datei aus seinem Zwischenspeicher zeigt — und
    genau darüber haben wir schon zweimal aneinander vorbeigeredet. */
-const BAU = "2026-08-30 · 7";
+const BAU = "2026-09-09 · 8";
 
 let cv, ctx, W = 0, H = 0, DPR = 1;
 let LAENDER = [];          // dekodierte Ringe mit vorberechneter Bounding-Box
@@ -26,8 +26,6 @@ let quiz = { frage: null, rest: [], antwort: null, punkte: 0, runden: 0 };
 /* Welche Lagebild-Ebenen eingeschaltet sind. Voreinstellung kommt aus
    lagen.js — nur Konflikte und Chokepoint-Status, damit die Karte lesbar
    startet und man den Rest bewusst dazuschaltet. */
-const AN = {};
-for (const e of EBENEN) AN[e.id] = e.an;
 
 /* Mehrfachauswahl von Ländern. Ein Klick schaltet ein Land dazu oder weg. */
 const AUSWAHL = new Set();
@@ -99,14 +97,29 @@ function init() {
       }
       return { pts: pts, bbox: [w, s2, e, n] };
     });
-    // Grobe Grösse, nur zum Vergleichen. Sie entscheidet bei Enklaven, wer
-    // gewinnt: Liechtenstein liegt in Österreich, Monaco in Frankreich —
-    // wer beide trifft, meint das kleinere.
-    let flaeche = 0;
+    // Zwei Grössen, zwei Zwecke — nicht verwechseln:
+    //
+    // `flaeche` ist die Summe der Umschliessungsrechtecke. Sie entscheidet
+    // bei Enklaven, wer einen Klick gewinnt: Liechtenstein liegt in
+    // Österreich, Monaco in Frankreich — wer beide trifft, meint das
+    // kleinere. Dafür reicht ein grober Vergleichswert.
+    //
+    // `echteFlaeche` ist die tatsächliche Polygonfläche (Gauss'sche
+    // Trapezformel). Sie geht in die Schwierigkeit des Quiz ein, und dort
+    // wäre das Rechteck irreführend: Indonesien spannt ein riesiges
+    // Rechteck auf und besteht doch aus Inseln.
+    let flaeche = 0, echteFlaeche = 0;
     for (const p of polys) {
       flaeche += (p.bbox[2] - p.bbox[0]) * (p.bbox[3] - p.bbox[1]);
+      const pts = p.pts;
+      let a = 0;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        a += pts[j][0] * pts[i][1] - pts[i][0] * pts[j][1];
+      }
+      echteFlaeche += Math.abs(a / 2);
     }
-    return { n: l.n, id: l.id, polys: polys, flaeche: flaeche };
+    return { n: l.n, id: l.id, polys: polys, flaeche: flaeche,
+             echteFlaeche: echteFlaeche };
   });
 
   resize();
@@ -144,11 +157,7 @@ function init() {
   };
 
   bauListe();
-  bauFenster();
-  bauEbenen();
-  bauStatuslegende();
   malAuswahl();
-  bauFeedPanel();
   document.querySelectorAll("nav button[data-modus]").forEach((b) => {
     b.onclick = () => setModus(b.dataset.modus);
   });
@@ -161,16 +170,27 @@ function init() {
   const bau = document.getElementById("lgBau");
   if (bau) bau.textContent = BAU;
 
-  holeLive();
-  holeFeed();
-  holeVerlauf();
-  holeLage();
-  setInterval(holeFeed, 5 * 60 * 1000);
+  // Quizart umschalten. Punktestand wird zurückgesetzt — er bezöge sich
+  // sonst auf zwei verschiedene Spiele.
+  document.querySelectorAll("#quizart .qa").forEach((b) => {
+    b.onclick = () => {
+      quizArt = b.dataset.q;
+      document.querySelectorAll("#quizart .qa").forEach((x) =>
+        x.classList.toggle("an", x.dataset.q === quizArt));
+      document.getElementById("stufen").hidden = quizArt !== "land";
+      document.querySelector('#leiste .lb.tr').hidden = quizArt !== "land";
+      quiz.rest = [];
+      quiz.punkte = 0;
+      quiz.runden = 0;
+      naechsteFrage();
+    };
+  });
+  bauStufen();
+
   document.body.dataset.frei = "nein";
   view = makeView(WELT_BBOX, W, H);
-  // Startbild ist die Karte. Die Lage steht daneben im Panel — beides auf
-  // einen Blick, ohne einen Klick.
-  setModus("welt");
+  // Startbild ist das Quiz — dafür ist die Seite jetzt da.
+  setModus("quiz");
   requestAnimationFrame(tick);
 }
 
@@ -284,11 +304,7 @@ function setModus(m) {
   // Ohne Neumessung behaelt die Leinwand ihre alte Hoehe und ueberdeckt das,
   // was darunter eingeblendet wird.
   requestAnimationFrame(resize);
-  if (m === "lage") {
-    aktiv = null;
-    bauKacheln();
-    if (!LAGE) holeLage();
-  } else if (m === "welt") {
+  if (m === "welt") {
     aktiv = null;
     fliegeZu(WELT_BBOX);
   } else if (m === "liste") {
@@ -397,32 +413,17 @@ function zeichne(now) {
       zeichneBetroffenBoegen(aktiv, now);
       zeichneRollenNamen(aktiv);
     } else {
-      // Die Lagebild-Ebenen gelten auch im Zoom — dort sind sie sogar
-      // nuetzlicher, weil sich die Ziele nicht mehr gegenseitig verdecken.
-      if (AN.konflikte) zeichneKonflikte(now);
-      if (AN.kontrolle) zeichneKontrollzonen();
       zeichneRouten(aktiv, now);
-      if (AN.vektoren) zeichneVektoren(now);
       zeichneOrte(aktiv);
       zeichneEngenName(aktiv);
-      if (AN.ziele) zeichneZiele(now);
-      if (AN.callouts) zeichneCallouts();
     }
     zeichneHover();
   } else {
     zeichneHover();
     zeichneMeere(markenKaesten());
-    if (AN.konflikte) zeichneKonflikte(now);
-    if (AN.kontrolle) zeichneKontrollzonen();
-    if (AN.vektoren) zeichneVektoren(now);
     if (AUSWAHL.size) zeichneAuswahlBoegen(now);
     zeichneMarken(now);
-    if (AN.ziele) zeichneZiele(now);
-    if (AN.callouts) zeichneCallouts();
   }
-  if (AN.ereignisse) { zeichneBahnen(now); zeichneEreignisse(now); }
-  zeichneAlarme(now);
-  zeichneFadenkreuz();
 }
 
 /* ---------- Live-Daten ---------- */
@@ -430,23 +431,10 @@ function zeichne(now) {
 /* Tägliche Durchfahrten je Enge, vom eigenen Server geholt (der wiederum
    IMF PortWatch abfragt). Beim Öffnen per Doppelklick vom Dateisystem gibt es
    keinen Server — dann bleibt es schlicht aus, statt Fehler zu werfen. */
-let LIVE = null;
-let FEED = null;
-let FEED_VERSUCHT = false;   // erst nach dem ersten Abruf etwas behaupten
-let FEED_FEHLER = null;
 
 /* Die Statuszeile unten muss dasselbe zählen wie die Karte zeigt — sonst
    steht dort "7 Meldungen", während vier zu sehen sind. */
-function malFeedStatus() {
-  const feld = document.getElementById("lgFeed");
-  if (!feld || !FEED || FEED.fehler) return;
-  const b = beitraegeImFenster();
-  const ereig = b.filter((x) => (x.arten || []).length).length;
-  feld.innerHTML = '<b style="color:' + (ereig ? "var(--blut)" : "var(--phos)") +
-    '">' + (ereig ? ereig + (ereig === 1 ? " EREIGNIS · " : " EREIGNISSE · ") : "") +
-    b.length + (b.length === 1 ? " MELDUNG" : " MELDUNGEN") + "</b>";
-  feld.title = "Zeitraum " + fensterText() + " · Stand " + (FEED.stand || "?");
-}
+
 
 /* ---------- Zeitfenster ----------
 
@@ -457,24 +445,12 @@ function malFeedStatus() {
 
    "alles" bleibt als Wahl erhalten — aber nicht als Voreinstellung. */
 
-const FENSTER = [
-  { id: "1", t: "1 STD", h: 1 },
-  { id: "12", t: "12 STD", h: 12 },
-  { id: "24", t: "1 TAG", h: 24 },
-  { id: "168", t: "1 WOCHE", h: 168 },
-  { id: "alle", t: "ALLES", h: 0 },
-];
-let fenster = "24";
 
 /* Zeitpunkt einer Meldung als Millisekunden, oder null. Die Zeitangaben
    kommen normiert vom Server ("YYYY-MM-DDTHH:MM", UTC ohne Kennzeichnung) —
    das Z muss hier dran, sonst liest der Browser sie als Ortszeit und alles
    verschiebt sich um den eigenen Zeitzonenversatz. */
-function zeitpunkt(iso) {
-  if (!iso) return null;
-  const t = Date.parse(iso + (/[Zz]|[+-]\d\d:?\d\d$/.test(iso) ? "" : "Z"));
-  return isNaN(t) ? null : t;
-}
+
 
 /* Fällt die Meldung ins gewählte Fenster?
 
@@ -489,594 +465,72 @@ function zeitpunkt(iso) {
    aus, obwohl Meldungen da waren.
 
    Der Ersatz wird nie als Ereigniszeit ausgegeben — siehe zeitText(). */
-function zeitVon(b) {
-  return zeitpunkt(b.zeit) !== null ? zeitpunkt(b.zeit) : zeitpunkt(b.gesehen);
-}
+
 
 /* Wie eine Zeit dasteht. Geschätzt heisst geschätzt. */
-function zeitText(b) {
-  if (b.zeit) return vorZeit(b.zeit);
-  if (b.gesehen) return "erstmals gesehen " + vorZeit(b.gesehen);
-  return "Zeit unbekannt";
-}
 
-function imFenster(b) {
-  const h = (FENSTER.find((f) => f.id === fenster) || {}).h || 0;
-  if (!h) return true;
-  const t = zeitVon(b);
-  if (t === null) return false;
-  return Date.now() - t <= h * 3600 * 1000;
-}
 
-function beitraegeImFenster() {
-  return ((FEED || {}).beitraege || []).filter(imFenster);
-}
 
-function fensterText() {
-  return (FENSTER.find((f) => f.id === fenster) || {}).t || "";
-}
 
-function bauFenster() {
-  const el = document.getElementById("fenster");
-  if (!el) return;
-  el.innerHTML = FENSTER.map((f) =>
-    '<button class="fb' + (f.id === fenster ? " an" : "") +
-    '" data-f="' + f.id + '">' + f.t + "</button>").join("");
-  el.querySelectorAll(".fb").forEach((b) => {
-    b.onclick = () => {
-      fenster = b.dataset.f;
-      bauFenster();
-      // Alles neu bauen, was gefiltert wird — Karte zeichnet sich ohnehin
-      // in jedem Bild neu, die Listen nicht.
-      GESEHEN.clear();
-      ALARME.length = 0;
-      bauEbenen();
-      malFeedStatus();
-      if (modus === "lage") bauKacheln();
-      else if (!AUSWAHL.size && modus !== "detail") bauFeedPanel();
-      else if (aktiv && modus === "detail") bauPanel(aktiv);
-    };
-  });
-}
-let VERLAUF = null;
 
-async function holeLive() {
-  const feld = document.getElementById("lgLive");
-  try {
-    const r = await fetch("api/live", { cache: "no-store" });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-    // Zwischengespeicherte Werte nicht wegwerfen, nur weil der letzte Abruf
-    // gestört war — sie bleiben brauchbar, müssen aber als solche
-    // gekennzeichnet sein.
-    const hatWerte = d.werte && Object.keys(d.werte).length;
-    if (!hatWerte) throw new Error(d.fehler || "keine Daten");
-    LIVE = d;
-    feld.innerHTML = '<b style="color:' + (d.fehler ? "var(--amber)" : "var(--phos)") +
-      '">' + d.stand + (d.fehler ? " · ABRUF GESTÖRT" : "") + "</b>";
-    feld.title = d.quelle + (d.fehler ? " — letzter Abruf: " + d.fehler : "");
-    basisSchluessel = "";
-  } catch (e) {
-    LIVE = null;
-    // Sichtbar aus, nicht heimlich aus.
-    feld.innerHTML = '<b style="color:var(--dim)">AUS</b>';
-    feld.title = "Kein Live-Abruf: " + e.message;
-  }
-}
+
+
+
+
+
 
 /* Status einer Meerenge: die Bewertung aus lagen.js ist von Hand gesetzt und
    veraltet. Wo Live-Zahlen vorliegen, wird daraus ein eigener Status
    abgeleitet und der SCHLECHTERE der beiden genommen — die Zahlen sehen den
    Verkehrseinbruch, die Bewertung kennt den militärischen Zusammenhang.
    Welcher gewonnen hat, steht im Panel. */
-const RANG = { gruen: 0, amber: 1, rot: 2 };
 
-function statusVon(id) {
-  const hand = STATUS[id];
-  const w = LIVE && LIVE.werte ? LIVE.werte[id] : null;
-  if (!w || w.abw === undefined) {
-    return hand ? { s: hand.s, b: hand.b, quelle: "Bewertung, " + STAND } : null;
-  }
-  // Verkehr weit unter dem Normalwert heisst: die Enge wird gemieden.
-  const abw = w.abw;
-  const ausZahl = abw <= -35 ? "rot" : abw <= -15 ? "amber" : "gruen";
-  const zahlText = "Durchfahrten " + w.n + "/Tag gegenüber sonst " + w.mittel +
-    " (" + (abw > 0 ? "+" : "") + abw + " %).";
-  if (!hand) return { s: ausZahl, b: zahlText, quelle: "aus Live-Zahlen" };
-  const schlechter = RANG[ausZahl] >= RANG[hand.s] ? ausZahl : hand.s;
-  return {
-    s: schlechter,
-    b: zahlText + " " + hand.b,
-    quelle: RANG[ausZahl] > RANG[hand.s] ? "aus Live-Zahlen hochgestuft"
-      : RANG[ausZahl] < RANG[hand.s] ? "Bewertung, " + STAND + " (Zahlen wären milder)"
-      : "Zahlen und Bewertung stimmen überein",
-  };
-}
+
+
 
 /* Beiträge aus den verfolgten Telegram-Kanälen. Ohne eingerichteten Zugang bleibt die
    Anzeige sichtbar leer statt stillschweigend zu fehlen. */
-async function holeFeed() {
-  const feld = document.getElementById("lgFeed");
-  try {
-    const r = await fetch("api/feed", { cache: "no-store" });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const d = await r.json();
-    FEED = d;
-    if (d.fehler) {
-      feld.innerHTML = '<b style="color:var(--dim)">' +
-        (d.fehler === "nicht eingerichtet" ? "NICHT EINGERICHTET" : "FEHLER") + "</b>";
-      feld.title = d.fehler;
-    } else {
-      malFeedStatus();
-    }
-  } catch (e) {
-    FEED = null;
-    FEED_FEHLER = e.message;
-    feld.innerHTML = '<b style="color:var(--dim)">AUS</b>';
-    feld.title = e.message;
-  }
-  FEED_VERSUCHT = true;
-  // Nach dem Abruf muss auch das gerendert werden, was den Feed anzeigt.
-  // Fehlte das: das Meldungspanel blieb auf "wird geladen …" stehen, obwohl
-  // die Daten längst da waren.
-  pruefeAlarme();
-  bauEbenen();
-  if (aktiv && modus === "detail") bauPanel(aktiv);
-  else if (!AUSWAHL.size) bauFeedPanel();
-  if (modus === "lage") bauKacheln();
-  holeLage();
-}
 
-async function holeVerlauf() {
-  try {
-    const r = await fetch("api/verlauf", { cache: "no-store" });
-    if (r.ok) VERLAUF = await r.json();
-  } catch (e) { VERLAUF = null; }
-  if (aktiv && modus === "detail") bauPanel(aktiv);
-}
+
+
 
 /* Wie viel wurde über diese Enge geschrieben, und wann? Wochenweise, weil
    Tageswerte bei Kanälen zu zackig sind, um etwas zu erkennen. Der Ausschlag
    ist die Information — nicht die einzelne Nachricht. */
-function verlaufBlock(engeId) {
-  if (!VERLAUF || !VERLAUF.gesamt) return "";
-  const wochen = {};
-  for (const [tag, zaehl] of Object.entries(VERLAUF.tage)) {
-    if (!zaehl[engeId]) continue;
-    // Auf den Wochenanfang runden.
-    const d = new Date(tag + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() - d.getUTCDay());
-    const k = d.toISOString().slice(0, 10);
-    wochen[k] = (wochen[k] || 0) + zaehl[engeId];
-  }
-  const keys = Object.keys(wochen).sort();
-  if (!keys.length) {
-    return '<h3>Verlauf der Erwähnungen</h3><p style="color:var(--dim);' +
-      'font-size:11px">In ' + VERLAUF.gesamt + " ausgewerteten Nachrichten " +
-      "kommt diese Enge nicht vor.</p>";
-  }
-  const werte = keys.map((k) => wochen[k]);
-  const max = Math.max(...werte);
-  const summe = werte.reduce((a, b) => a + b, 0);
-  const spitze = keys[werte.indexOf(max)];
-  const W = 360, H = 54;
-  const punkte = werte.map((v, i) =>
-    (keys.length < 2 ? W / 2 : (i / (keys.length - 1)) * W).toFixed(1) + "," +
-    (H - (v / max) * (H - 6)).toFixed(1)).join(" ");
-  return '<h3>Verlauf der Erwähnungen <span class="tag">Telegram</span></h3>' +
-    '<svg class="spark" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none">' +
-    '<polyline points="' + punkte + '" fill="none" stroke="#00e676" ' +
-    'stroke-width="1.8" vector-effect="non-scaling-stroke"/></svg>' +
-    '<div class="sparkf"><span>' + keys[0] + "</span><span>" +
-    keys[keys.length - 1] + "</span></div>" +
-    '<div class="hz"><span class="hk">Gesamt</span><span class="hv">' + summe +
-    " Nachrichten in " + keys.length + " Wochen</span></div>" +
-    '<div class="hz"><span class="hk">Spitze</span><span class="hv">' + max +
-    " in der Woche ab " + spitze + "</span></div>";
-}
+
 
 /* Laufende Einschlagsdarstellungen. Eine neue Drohnen- oder Raketenmeldung
    soll man sehen, ohne ins Panel zu schauen — deshalb die Animation auf der
    Karte statt nur einer Zeile im Text. */
-const ALARME = [];
-const GESEHEN = new Set();
-const HEFTIG = ["drohne", "rakete", "explosion", "angriff", "mine"];
 
-function pruefeAlarme() {
-  if (!FEED || !FEED.beitraege) return;
-  let erster = GESEHEN.size === 0;
-  for (const b of beitraegeImFenster()) {
-    if (GESEHEN.has(b.id)) continue;
-    GESEHEN.add(b.id);
-    // Beim allerersten Abruf nicht die ganze Historie durchspielen.
-    if (erster) continue;
-    const arten = (b.arten || []).filter((a) => HEFTIG.includes(a));
-    if (!arten.length) continue;
-    // Am Ort des Geschehens, Enge nur als Rueckfall — wie bei den Symbolen.
-    if (b.ort) {
-      ALARME.push({ p: b.ort, art: arten[0], start: performance.now(),
-                    text: ART_TEXT[arten[0]] || arten[0] });
-      continue;
-    }
-    for (const id of b.engen || []) {
-      const e = ENGEN.find((x) => x.id === id);
-      if (e) ALARME.push({ p: e.pos, art: arten[0], start: performance.now(),
-                           text: ART_TEXT[arten[0]] || arten[0] });
-    }
-  }
-  while (ALARME.length > 12) ALARME.shift();
-}
+
 
 /* Ein Einschlag: eine Flugbahn, die aus der Tiefe kommt und auf den Punkt
    zuläuft, dann Druckwellen-Ringe. Der Höheneindruck entsteht durch den
    Bogen und seinen Schatten auf der Karte. */
-function zeichneAlarme(now) {
-  for (let i = ALARME.length - 1; i >= 0; i--) {
-    const a = ALARME[i];
-    const t = (now - a.start) / 4200;      // Gesamtdauer der Animation
-    if (t > 1) { ALARME.splice(i, 1); continue; }
-    const [x, y] = view.project(a.p[0], a.p[1]);
-    if (x < -80 || x > W + 80) continue;
 
-    // Phase 1: Anflug
-    if (t < 0.42) {
-      const f = t / 0.42;
-      const w = -Math.PI / 4;
-      const weit = Math.min(W, H) * 0.5;
-      const sx = x + Math.cos(w) * weit, sy = y + Math.sin(w) * weit - 60;
-      const px = sx + (x - sx) * f;
-      const py = sy + (y - sy) * f - Math.sin(Math.PI * f) * 70;
-      ctx.strokeStyle = "rgba(255,45,45,.35)";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 5]);
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(px, py);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Schatten auf der Karte gibt dem Bogen seine Höhe
-      const gx = sx + (x - sx) * f, gy = sy + 60 + (y - sy - 60) * f;
-      ctx.globalAlpha = 0.3;
-      ctx.beginPath();
-      ctx.ellipse(gx, gy, 5, 2, 0, 0, 7);
-      ctx.fillStyle = "#000";
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.beginPath();
-      ctx.arc(px, py, 3.5, 0, 7);
-      ctx.fillStyle = "#fff";
-      ctx.fill();
-      continue;
-    }
-
-    // Phase 2: Einschlag und Druckwellen
-    const e = (t - 0.42) / 0.58;
-    for (let k = 0; k < 3; k++) {
-      const r = ((e * 1.5 - k * 0.22) % 1);
-      if (r <= 0) continue;
-      ctx.beginPath();
-      ctx.arc(x, y, 6 + r * 55, 0, 7);
-      ctx.strokeStyle = "rgba(255,45,45," + (0.7 * (1 - r)).toFixed(3) + ")";
-      ctx.lineWidth = 2.5 * (1 - r) + 0.5;
-      ctx.stroke();
-    }
-    ctx.beginPath();
-    ctx.arc(x, y, 5 * (1 - e) + 3, 0, 7);
-    ctx.fillStyle = "#ff2d2d";
-    ctx.fill();
-    ctx.font = '700 10px ui-monospace,Menlo,Consolas,monospace';
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillStyle = "#ff8a8a";
-    ctx.globalAlpha = Math.max(0, 1 - e);
-    ctx.letterSpacing = "1.5px";
-    halo(a.text.toUpperCase(), x, y - 16 - e * 14);
-    ctx.letterSpacing = "0px";
-    ctx.globalAlpha = 1;
-  }
-}
 
 /* Symbole der Ereignisarten. Handgezeichnet, weil eine Bilddatei den
    Grundsatz "eine Datei, keine Abhängigkeiten" bräche — und weil sich
    Strichzeichnungen sauber in jeder Grösse zeichnen lassen. */
-const ART_SYMBOL = {
-  // Quadrokopter von oben: vier Ausleger mit Rotoren, Rumpf in der Mitte
-  drohne: (c) => {
-    for (const [x, y] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-      c.beginPath();
-      c.moveTo(0, 0);
-      c.lineTo(x * 5, y * 5);
-      c.stroke();
-      c.beginPath();
-      c.arc(x * 6.5, y * 6.5, 2.6, 0, 7);
-      c.stroke();
-    }
-    c.beginPath();
-    c.rect(-2, -2, 4, 4);
-    c.fill();
-  },
-  // Rakete im Anflug: Spitze, Rumpf, Leitwerk, Abgasfahne
-  rakete: (c) => {
-    c.beginPath();
-    c.moveTo(0, -8);
-    c.lineTo(2.6, -2);
-    c.lineTo(2.6, 4);
-    c.lineTo(-2.6, 4);
-    c.lineTo(-2.6, -2);
-    c.closePath();
-    c.fill();
-    c.beginPath();
-    c.moveTo(-2.6, 2); c.lineTo(-5.5, 6); c.lineTo(-2.6, 5);
-    c.moveTo(2.6, 2); c.lineTo(5.5, 6); c.lineTo(2.6, 5);
-    c.stroke();
-    c.beginPath();
-    c.moveTo(0, 5); c.lineTo(0, 9);
-    c.stroke();
-  },
-  // Explosion: Zackenstern
-  explosion: (c) => {
-    c.beginPath();
-    for (let i = 0; i < 12; i++) {
-      const w = (i / 12) * Math.PI * 2;
-      const r = i % 2 ? 3.4 : 8.5;
-      i ? c.lineTo(Math.cos(w) * r, Math.sin(w) * r)
-        : c.moveTo(Math.cos(w) * r, Math.sin(w) * r);
-    }
-    c.closePath();
-    c.fill();
-  },
-  // Angriff: gekreuzte Klingen
-  angriff: (c) => {
-    c.beginPath();
-    c.moveTo(-6, -6); c.lineTo(6, 6);
-    c.moveTo(6, -6); c.lineTo(-6, 6);
-    c.lineWidth = 2.2;
-    c.stroke();
-  },
-  // Seemine: Kugel mit Zündhörnern
-  mine: (c) => {
-    c.beginPath();
-    c.arc(0, 0, 4.2, 0, 7);
-    c.fill();
-    for (let i = 0; i < 8; i++) {
-      const w = (i / 8) * Math.PI * 2;
-      c.beginPath();
-      c.moveTo(Math.cos(w) * 4.2, Math.sin(w) * 4.2);
-      c.lineTo(Math.cos(w) * 8, Math.sin(w) * 8);
-      c.stroke();
-    }
-  },
-  // Aufgebrachtes Schiff: Rumpf mit Haken darüber
-  aufbringung: (c) => {
-    c.beginPath();
-    c.moveTo(-7, 2); c.lineTo(7, 2); c.lineTo(4.5, 6); c.lineTo(-4.5, 6);
-    c.closePath();
-    c.fill();
-    c.beginPath();
-    c.moveTo(0, -8); c.lineTo(0, -2);
-    c.arc(0, -2, 2.6, -Math.PI / 2, Math.PI, true);
-    c.stroke();
-  },
-  // Sperrung: Schlagbaum
-  sperrung: (c) => {
-    c.beginPath();
-    c.moveTo(-8, 0); c.lineTo(8, 0);
-    c.lineWidth = 3;
-    c.stroke();
-    c.beginPath();
-    c.moveTo(-8, -4); c.lineTo(-8, 5);
-    c.moveTo(8, -4); c.lineTo(8, 5);
-    c.lineWidth = 1.6;
-    c.stroke();
-  },
-  // Brand: Flamme
-  brand: (c) => {
-    c.beginPath();
-    c.moveTo(0, -9);
-    c.bezierCurveTo(5, -4, 6, 1, 2.5, 5);
-    c.bezierCurveTo(1, 6.5, -1, 6.5, -2.5, 5);
-    c.bezierCurveTo(-6, 1, -4, -3, 0, -9);
-    c.closePath();
-    c.fill();
-  },
-};
+
 
 /* Flugbahnen: nur wenn Start UND Ziel im Text standen. Fehlt eines, wird
    keine Linie gezeichnet — eine erfundene Richtung wäre schlimmer als keine. */
-function zeichneBahnen(now) {
-  if (!FEED || !FEED.beitraege) return;
-  let k = 0;
-  for (const b of beitraegeImFenster()) {
-    const bahn = b.bahn || [];
-    const von = bahn[0], nach = bahn[1];
-    if (!von || !nach || !(b.arten || []).length) continue;
-    const geo = grosskreis(von, nach, 40);
-    const pts = geo.map((p) => view.project(p[0], p[1]));
-    const d = Math.hypot(pts[pts.length - 1][0] - pts[0][0],
-                         pts[pts.length - 1][1] - pts[0][1]);
-    const hoehe = Math.min(d * 0.28, H * 0.3);
-    const bogen = pts.map((p, i) => {
-      const t = i / (pts.length - 1);
-      return [p[0], p[1] - Math.sin(Math.PI * t) * hoehe];
-    });
-    const pfad = (arr) => {
-      ctx.beginPath();
-      ctx.moveTo(arr[0][0], arr[0][1]);
-      for (let i = 1; i < arr.length; i++) ctx.lineTo(arr[i][0], arr[i][1]);
-    };
-    // Bodenspur zeigt, worüber die Bahn läuft
-    ctx.save();
-    ctx.globalAlpha = 0.22;
-    ctx.setLineDash([3, 5]);
-    ctx.strokeStyle = "#ff2d2d";
-    ctx.lineWidth = 1;
-    pfad(pts);
-    ctx.stroke();
-    ctx.restore();
-    ctx.strokeStyle = "rgba(255,45,45,.75)";
-    ctx.lineWidth = 1.6;
-    ctx.setLineDash([10, 7]);
-    ctx.lineDashOffset = -(now / 38) % 17;
-    pfad(bogen);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    // Symbol der Waffenart wandert die Bahn entlang
-    const t = ((now / 5200) + (k++ * 0.19)) % 1;
-    const i = Math.min(bogen.length - 2, Math.floor(t * (bogen.length - 1)));
-    const [x, y] = bogen[i];
-    const w = Math.atan2(bogen[i + 1][1] - y, bogen[i + 1][0] - x);
-    const art = b.arten.find((a) => ART_SYMBOL[a]) || "rakete";
-    ctx.save();
-    ctx.translate(x, y);
-    // Raketen und Drohnen zeigen in Flugrichtung; die Symbole sind nach
-    // oben gezeichnet, deshalb eine Vierteldrehung dazu.
-    ctx.rotate(w + Math.PI / 2);
-    ctx.scale(0.8, 0.8);
-    ctx.strokeStyle = "#ffb3b3";
-    ctx.fillStyle = "#ffb3b3";
-    ctx.lineWidth = 1.6;
-    ctx.lineCap = "round";
-    ART_SYMBOL[art](ctx);
-    ctx.restore();
-    // Zielmarkierung
-    const z = pts[pts.length - 1];
-    ctx.beginPath();
-    ctx.arc(z[0], z[1], 5 + 2 * Math.sin(now / 300), 0, 7);
-    ctx.strokeStyle = "#ff2d2d";
-    ctx.lineWidth = 1.4;
-    ctx.stroke();
-  }
-}
+
 
 /* Alle bekannten Ereignisse als Symbole an ihrer Meerenge. Mehrere am
    selben Ort werden aufgefächert, sonst liegen sie übereinander. */
-function zeichneEreignisse(now) {
-  if (!FEED || !FEED.beitraege) return;
-  // Gruppiert wird nach ORT, nicht nach Meerenge. Vorher sass ein Angriff
-  // auf Odessa am Bosporus, weil das die einzige Position war, die es gab.
-  const proOrt = {};
-  const merke = (pos, art, b) => {
-    const k = pos[0].toFixed(2) + "," + pos[1].toFixed(2);
-    const g = (proOrt[k] = proOrt[k] || { pos: pos, liste: [] });
-    g.liste.push({ art: art, b: b });
-  };
-  // Beim Zeichnen merken, wo welches Symbol landet — sonst liesse es sich
-  // nicht anklicken. Die Liste wird in jedem Bild neu gefüllt.
-  EREIGNIS_TREFFER.length = 0;
-  for (const b of beitraegeImFenster()) {
-    for (const art of b.arten || []) {
-      if (!ART_SYMBOL[art]) continue;
-      if (b.ort) {
-        merke(b.ort, art, b);
-        continue;
-      }
-      // Kein erkannter Ort — dann wenigstens an der genannten Meerenge.
-      for (const id of b.engen || []) {
-        const e = ENGEN.find((x) => x.id === id);
-        if (e) merke(e.pos, art, b);
-      }
-    }
-  }
-  const puls = 0.72 + 0.28 * Math.sin(now / 480);
-  for (const gruppe of Object.values(proOrt)) {
-    const liste = gruppe.liste;
-    const [mx, my] = view.project(gruppe.pos[0], gruppe.pos[1]);
-    if (mx < -60 || mx > W + 60) continue;
-    // Nur die jüngsten sechs, sonst wird der Ort unlesbar.
-    const zeigen = liste.slice(0, 6);
-    zeigen.forEach((z, i) => {
-      // Halbkreis oberhalb des Markers auffächern.
-      const w = -Math.PI / 2 + (i - (zeigen.length - 1) / 2) * 0.52;
-      const r = 30;
-      const x = mx + Math.cos(w) * r, y = my + Math.sin(w) * r;
-      EREIGNIS_TREFFER.push({ x: x, y: y, art: z.art, b: z.b });
-      ctx.save();
-      ctx.translate(x, y);
-      // Verbindungslinie zum Ort
-      ctx.strokeStyle = "rgba(255,45,45,.3)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(mx - x, my - y);
-      ctx.stroke();
-      // Scheibe als Hintergrund, damit das Symbol auf der Karte lesbar ist
-      ctx.beginPath();
-      ctx.arc(0, 0, 11, 0, 7);
-      ctx.fillStyle = "rgba(8,4,4,.88)";
-      ctx.fill();
-      const istMarkiert = z.b.id === MARKIERT;
-      ctx.strokeStyle = istMarkiert ? "#ffb000" : "#ff2d2d";
-      ctx.lineWidth = istMarkiert ? 2.2 : 1.4;
-      ctx.globalAlpha = istMarkiert ? 1 : (i === 0 ? puls : 0.75);
-      ctx.stroke();
-      if (istMarkiert) {
-        ctx.beginPath();
-        ctx.arc(0, 0, 16 + Math.sin(now / 300) * 2, 0, 7);
-        ctx.strokeStyle = "#ffb000";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = "#ff8a8a";
-      ctx.fillStyle = "#ff8a8a";
-      ctx.lineWidth = 1.4;
-      ctx.lineCap = "round";
-      ART_SYMBOL[z.art](ctx);
-      ctx.restore();
-    });
-    // Anzahl, wenn mehr da sind als gezeigt
-    if (liste.length > zeigen.length) {
-      ctx.font = '700 9px ui-monospace,Menlo,Consolas,monospace';
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#ff8a8a";
-      halo("+" + (liste.length - zeigen.length), mx + 34, my - 30);
-    }
-  }
-}
 
-const ART_TEXT = {
-  drohne: "Drohne", rakete: "Rakete", explosion: "Explosion",
-  angriff: "Angriff", mine: "Mine", aufbringung: "Schiff aufgebracht",
-  sperrung: "Sperrung", brand: "Brand",
-};
+
+
 
 /* Ereignisse zu dieser Enge — das, wonach man tatsächlich Ausschau hält.
    Steht vor den übrigen Meldungen, damit man es nicht suchen muss. */
-function ereignisBlock(engeId) {
-  if (!FEED || FEED.fehler) return "";
-  const tr = (FEED.beitraege || []).filter(
-    (b) => b.engen.includes(engeId) && (b.arten || []).length);
-  if (!tr.length) return "";
-  return '<h3 style="color:#ff6b6b">Ereignisse <span class="tag">ungeprüft</span></h3>' +
-    tr.slice(0, 6).map((b) =>
-      '<div class="ereig"><div class="ek">' +
-      (b.arten.map((a) => ART_TEXT[a] || a).join(" · ")) +
-      "<span>" + (b.zeit || "").slice(0, 16).replace("T", " ") + "</span></div>" +
-      '<div class="mt">' + b.text.replace(/[<>&]/g, "") + "</div>" +
-      '<div class="eq">@' + b.konto + "</div></div>").join("");
-}
+
 
 /* Meldungen zu genau dieser Meerenge, als Block fürs Panel. */
-function meldungsBlock(engeId) {
-  if (!FEED) return "";
-  const treffer = (FEED.beitraege || []).filter((b) => b.engen.includes(engeId));
-  const kopf = '<h3>Meldungen <span class="tag">X · ungeprüft</span></h3>';
-  if (FEED.fehler) {
-    return kopf + '<p style="color:var(--dim);font-size:11px">' +
-      (FEED.fehler === "nicht eingerichtet"
-        ? "Keine X-Konten hinterlegt. Zugangstoken und Konten in config.json eintragen."
-        : "Abruf fehlgeschlagen: " + FEED.fehler) + "</p>";
-  }
-  if (!treffer.length) {
-    return kopf + '<p style="color:var(--dim);font-size:11px">Keine der ' +
-      FEED.beitraege.length + " abgerufenen Meldungen erwähnt diese Enge.</p>";
-  }
-  return kopf + treffer.slice(0, 8).map((b) =>
-    '<div class="meld"><div class="mk">@' + b.konto +
-    '<span>' + (b.zeit || "").slice(0, 16).replace("T", " ") + "</span></div>" +
-    "<div class=\"mt\">" + b.text.replace(/[<>&]/g, "") + "</div></div>").join("");
-}
+
 
 /* Welches Land liegt an diesem Punkt? Ungerade Zahl von Ringkreuzungen
    heisst drin — Löcher (Enklaven, Seen) kippen die Parität und fallen damit
@@ -1411,248 +865,29 @@ function zeichneAuswahlBoegen(now) {
 
 /* ---------- Lagebild-Ebenen ---------- */
 
-function ringPfad(c, ring) {
-  c.beginPath();
-  ring.forEach((p, i) => {
-    const [x, y] = view.project(p[0], p[1]);
-    i ? c.lineTo(x, y) : c.moveTo(x, y);
-  });
-  c.closePath();
-}
+
 
 /* Ebene 1 — Konfliktzonen. Der Puls macht sie ohne Legende als "aktiv"
    lesbar; die Farbe unterscheidet hoch von kritisch. */
-function zeichneKonflikte(now) {
-  const puls = 0.5 + 0.5 * Math.sin(now / 620);
-  // Im Zoom fuellt die Theaterflaeche das halbe Bild und ueberdeckt alles.
-  // Dann nur noch die Kante zeichnen.
-  const nah = view.bbox[2] - view.bbox[0] < 25;
-  const daempfer = nah ? 0.12 : 1;
-  for (const k of KONFLIKTE) {
-    const farbe = k.stufe === "kritisch" ? "#ff2d2d" : "#ff7a1f";
-    ringPfad(ctx, k.ring);
-    ctx.fillStyle = k.stufe === "kritisch"
-      ? "rgba(255,45,45," + (0.10 + 0.10 * puls) + ")"
-      : "rgba(255,122,31," + (0.08 + 0.08 * puls) + ")";
-    ctx.fill();
-    ctx.strokeStyle = farbe;
-    ctx.lineWidth = 2.5;
-    ctx.setLineDash([]);
-    ctx.globalAlpha = 0.55 + 0.45 * puls;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
 
-    // Eckwinkel wie in einem Zielrahmen
-    let w = 1e9, s = 1e9, e = -1e9, n = -1e9;
-    for (const p of k.ring) {
-      const [x, y] = view.project(p[0], p[1]);
-      w = Math.min(w, x); e = Math.max(e, x);
-      s = Math.min(s, y); n = Math.max(n, y);
-    }
-    ctx.strokeStyle = farbe;
-    ctx.lineWidth = 1.5;
-    const L = 13;
-    ctx.beginPath();
-    for (const [cx, cy, sx, sy] of [[w, s, 1, 1], [e, s, -1, 1], [w, n, 1, -1], [e, n, -1, -1]]) {
-      ctx.moveTo(cx, cy + sy * L); ctx.lineTo(cx, cy); ctx.lineTo(cx + sx * L, cy);
-    }
-    ctx.stroke();
-
-    ctx.font = "700 10px var(--mono)";
-    ctx.font = '700 10px ui-monospace,Menlo,Consolas,monospace';
-    ctx.textAlign = "left";
-    ctx.textBaseline = "bottom";
-    ctx.fillStyle = farbe;
-    ctx.letterSpacing = "1.5px";
-    halo(k.t, w, s - 6);
-    ctx.letterSpacing = "0px";
-  }
-}
 
 /* Ebene 3 — Kontroll- und Blockadezonen, schraffiert statt gefuellt,
    damit sie sich von den Konfliktflaechen unterscheiden. */
-function zeichneKontrollzonen() {
-  for (const z of KONTROLLZONEN) {
-    ringPfad(ctx, z.ring);
-    ctx.save();
-    ctx.clip();
-    let w = 1e9, s = 1e9, e = -1e9, n = -1e9;
-    for (const p of z.ring) {
-      const [x, y] = view.project(p[0], p[1]);
-      w = Math.min(w, x); e = Math.max(e, x);
-      s = Math.min(s, y); n = Math.max(n, y);
-    }
-    ctx.strokeStyle = "rgba(192,76,255,.5)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let d = w - (n - s); d < e; d += 9) {
-      ctx.moveTo(d, n);
-      ctx.lineTo(d + (n - s), s);
-    }
-    ctx.stroke();
-    ctx.restore();
-    ringPfad(ctx, z.ring);
-    ctx.strokeStyle = "#c04cff";
-    ctx.lineWidth = 1.8;
-    ctx.setLineDash([7, 4]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    const [mx, my] = view.project(
-      z.ring.reduce((a, p) => a + p[0], 0) / z.ring.length,
-      z.ring.reduce((a, p) => a + p[1], 0) / z.ring.length);
-    ctx.font = '700 9px ui-monospace,Menlo,Consolas,monospace';
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#d79bff";
-    ctx.letterSpacing = "1.2px";
-    halo(z.t, mx, my);
-    ctx.letterSpacing = "0px";
-  }
-}
+
 
 /* Ebene 2 — Ziele und Schluesselanlagen als Rauten mit Datenkaestchen. */
-function zeichneZiele(now) {
-  const blink = 0.6 + 0.4 * Math.sin(now / 400);
-  const gesetzt = [];
-  for (const z of ZIELE) {
-    const [x, y] = view.project(z.p[0], z.p[1]);
-    if (x < -40 || x > W + 40 || y < -20 || y > H + 20) continue;
-    const farbe = ZIEL_TYPEN[z.typ].c;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(Math.PI / 4);
-    ctx.strokeStyle = farbe;
-    ctx.lineWidth = 1.8;
-    ctx.globalAlpha = blink;
-    ctx.strokeRect(-5, -5, 10, 10);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = farbe;
-    ctx.fillRect(-2, -2, 4, 4);
-    ctx.restore();
 
-    ctx.font = '700 9px ui-monospace,Menlo,Consolas,monospace';
-    ctx.letterSpacing = "1px";
-    const b = ctx.measureText(z.t).width;
-    // Kaestchen abwechselnd rechts/links, damit sie sich seltener decken
-    let lx = x + 11, ly = y - 13;
-    const stoert = () => gesetzt.some((m) =>
-      !(lx + b + 6 < m[0] || lx > m[2] || ly + 12 < m[1] || ly - 4 > m[3]));
-    if (stoert()) { ly = y + 15; }
-    if (stoert()) { lx = x - b - 17; ly = y - 13; }
-    gesetzt.push([lx - 3, ly - 4, lx + b + 6, ly + 12]);
-    ctx.fillStyle = "rgba(4,8,10,.82)";
-    ctx.fillRect(lx - 3, ly - 3, b + 8, 13);
-    ctx.strokeStyle = farbe;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(lx - 3, ly - 3, b + 8, 13);
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = farbe;
-    ctx.fillText(z.t, lx + 1, ly);
-    ctx.letterSpacing = "0px";
-  }
-}
 
 /* Ebene 5 — Kraftvektoren. Duenn, gestrichelt, laufend. */
-function zeichneVektoren(now) {
-  for (const v of VEKTOREN) {
-    const pts = v.p.map((p) => view.project(p[0], p[1]));
-    ctx.strokeStyle = "#ffb000";
-    ctx.lineWidth = 1.4;
-    ctx.setLineDash([9, 6]);
-    ctx.lineDashOffset = -(now / 40) % 15;
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    const a = pts[pts.length - 1], b = pts[pts.length - 2];
-    const w = Math.atan2(a[1] - b[1], a[0] - b[0]);
-    ctx.save();
-    ctx.translate(a[0], a[1]);
-    ctx.rotate(w);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-9, -4.5);
-    ctx.lineTo(-9, 4.5);
-    ctx.closePath();
-    ctx.fillStyle = "#ffb000";
-    ctx.fill();
-    ctx.restore();
-  }
-}
+
 
 /* Ebene 6 — Intel-Callouts: warum diese Stelle ueberhaupt zaehlt. */
-function zeichneCallouts() {
-  ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
-  // Boxen duerfen sich nicht ueberdecken — sonst ist die Ebene unlesbar,
-  // und genau das soll die Ebenensteuerung ja verhindern.
-  const belegt = [];
-  const frei = (r) => !belegt.some((m) =>
-    !(r[2] < m[0] || r[0] > m[2] || r[3] < m[1] || r[1] > m[3]));
-  for (const c of CALLOUTS) {
-    const [x, y] = view.project(c.p[0], c.p[1]);
-    if (x < 0 || x > W || y < 0 || y > H) continue;
-    const zeilen = umbruch(c.b, 30);
-    const bw = 190, bh = 16 + zeilen.length * 12;
-    // Vier Ankerstellen durchprobieren, sonst weglassen.
-    let bx = null, by = null;
-    for (const [dx, dy] of [[18, -bh - 14], [18, 16], [-bw - 18, -bh - 14], [-bw - 18, 16]]) {
-      const px = Math.min(Math.max(8, x + dx), W - bw - 8);
-      const py = Math.min(Math.max(8, y + dy), H - bh - 8);
-      if (frei([px - 4, py - 4, px + bw + 4, py + bh + 4])) { bx = px; by = py; break; }
-    }
-    if (bx === null) continue;
-    belegt.push([bx - 4, by - 4, bx + bw + 4, by + bh + 4]);
-    ctx.strokeStyle = "rgba(0,230,118,.55)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(bx + 10, by + bh);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(4,10,8,.9)";
-    ctx.fillRect(bx, by, bw, bh);
-    ctx.strokeStyle = "#00e676";
-    ctx.strokeRect(bx, by, bw, bh);
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = "#00e676";
-    ctx.letterSpacing = "1.4px";
-    ctx.font = '700 10px ui-monospace,Menlo,Consolas,monospace';
-    ctx.fillText(c.t, bx + 7, by + 5);
-    ctx.letterSpacing = "0px";
-    ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
-    ctx.fillStyle = "#9fd8bd";
-    zeilen.forEach((z, i) => ctx.fillText(z, bx + 7, by + 19 + i * 12));
-  }
-}
 
-function umbruch(t, n) {
-  const worte = t.split(" ");
-  const raus = [];
-  let z = "";
-  for (const w of worte) {
-    if ((z + " " + w).trim().length > n) { raus.push(z.trim()); z = w; }
-    else z += " " + w;
-  }
-  if (z.trim()) raus.push(z.trim());
-  return raus;
-}
+
+
 
 /* Fadenkreuz-Markierungen an den Kartenraendern. */
-function zeichneFadenkreuz() {
-  ctx.strokeStyle = "rgba(0,230,118,.32)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const L = 16;
-  for (const [x, y, sx, sy] of [[6, 6, 1, 1], [W - 6, 6, -1, 1],
-                                [6, H - 6, 1, -1], [W - 6, H - 6, -1, -1]]) {
-    ctx.moveTo(x, y + sy * L); ctx.lineTo(x, y); ctx.lineTo(x + sx * L, y);
-  }
-  ctx.moveTo(W / 2 - 8, 6); ctx.lineTo(W / 2 + 8, 6);
-  ctx.moveTo(W / 2, 6); ctx.lineTo(W / 2, 14);
-  ctx.stroke();
-}
+
 
 /* Gradnetz als dezentes Raster — gehoert zum Erscheinungsbild eines
    Lagemonitors und hilft beim Abschaetzen von Entfernungen. */
@@ -1779,9 +1014,58 @@ function zeichneEngenName(e) {
   ctx.letterSpacing = "0px";
 }
 
+/* Nach der Antwort das gesuchte Land aufdecken.
+
+   Grün, wenn getroffen; amber als Auflösung, wenn nicht. Erst hier fällt
+   der Name — vorher wäre er die Lösung. */
+function zeichneQuizLand() {
+  if (!quiz.antwort || !quiz.frage) return;
+  const l = LAENDER.find((x) => x.n === quiz.frage.n);
+  if (!l) return;
+  const richtig = quiz.antwort === quiz.frage.n;
+  const farbe = richtig ? "#00e676" : "#ffb000";
+  const [vw, vs, ve, vn] = view.bbox;
+  ctx.beginPath();
+  let sx = 0, sy = 0, n = 0;
+  for (const p of l.polys) {
+    const [w, s, e, nn] = p.bbox;
+    if (e < vw || w > ve || nn < vs || s > vn) continue;
+    p.pts.forEach((pt, i) => {
+      const [x, y] = view.project(pt[0], pt[1]);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      sx += x; sy += y; n++;
+    });
+    ctx.closePath();
+  }
+  ctx.fillStyle = richtig ? "rgba(0,230,118,.20)" : "rgba(255,176,0,.20)";
+  ctx.fill("nonzero");
+  ctx.strokeStyle = farbe;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Ein Ring um den Ort, damit ein Zwergstaat überhaupt zu sehen ist.
+  const m = landMitte(quiz.frage.n);
+  if (m) {
+    const [x, y] = view.project(m[0], m[1]);
+    const puls = 16 + 4 * Math.sin(performance.now() / 320);
+    ctx.beginPath();
+    ctx.arc(x, y, puls, 0, 7);
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.font = '700 12px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = farbe;
+    halo(quiz.frage.de.toUpperCase(), x, y - puls - 6);
+  }
+}
+
 /* Marker der Meerengen auf der Weltkarte. */
 function zeichneMarken(now) {
   const puls = 1 + 0.35 * Math.sin(now / 520);
+  // Im Länderquiz haben die Meerengen nichts zu suchen — sie lenken ab und
+  // beantworten die Frage nicht.
+  if (modus === "quiz" && quizArt === "land") return zeichneQuizLand();
   for (const e of ENGEN) {
     const [x, y] = view.project(e.pos[0], e.pos[1]);
     const ist = hover === e;
@@ -1796,36 +1080,16 @@ function zeichneMarken(now) {
       continue;
     }
 
-    // Farbe nach Chokepoint-Status, wenn die Ebene an ist — sonst neutral.
-    const sv = AN.status ? statusVon(e.id) : null;
-    const st = sv ? STATUS_FARBEN[sv.s].c : F.markeAus;
+    const st = F.markeAus;
     const r = ist ? 7 * puls : 5.5;
     ctx.strokeStyle = st;
     ctx.lineWidth = 1.8;
     ctx.strokeRect(x - r, y - r, r * 2, r * 2);
     ctx.fillStyle = st;
     ctx.fillRect(x - 2, y - 2, 4, 4);
-    if (sv && sv.s !== "gruen") {
-      // Bedrohte Engen bekommen einen laufenden Ring — faellt im
-      // Randbereich des Blickfelds auf, ohne die Karte zuzukleistern.
-      ctx.globalAlpha = 0.75 - 0.55 * (puls - 0.65);
-      ctx.beginPath();
-      ctx.arc(x, y, r + 5 + 4 * puls, 0, 7);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
 
     ctx.font = (ist ? "700 " : "") + '10px ui-monospace,Menlo,Consolas,monospace';
     ctx.letterSpacing = "1.2px";
-    // Live-Durchfahrten unter den Marker, wenn vorhanden.
-    if (LIVE && LIVE.werte[e.id]) {
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#00e676";
-      ctx.font = '9px ui-monospace,Menlo,Consolas,monospace';
-      halo(LIVE.werte[e.id].n + " SCHIFFE/TAG", x + 10, y + 5);
-      ctx.font = (ist ? "700 " : "") + '10px ui-monospace,Menlo,Consolas,monospace';
-    }
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     const tx = x + 10, ty = y - 9;
@@ -1837,8 +1101,9 @@ function zeichneMarken(now) {
     ctx.letterSpacing = "0px";
   }
 
-  // Im Quiz zusaetzlich: der geklickte Punkt und die Luftlinie zur Loesung.
-  if (modus === "quiz" && quiz.antwort) {
+  // Im Meerengen-Quiz zusaetzlich: der geklickte Punkt und die Luftlinie
+  // zur Loesung. Im Laenderquiz ist quiz.antwort ein Name, keine Koordinate.
+  if (modus === "quiz" && quizArt === "enge" && Array.isArray(quiz.antwort)) {
     const a = view.project(quiz.antwort[0], quiz.antwort[1]);
     const b = view.project(quiz.frage.pos[0], quiz.frage.pos[1]);
     ctx.setLineDash([4, 4]);
@@ -1984,102 +1249,11 @@ function mausPos(ev) {
   return [ev.clientX - r.left, ev.clientY - r.top];
 }
 
-/* ---------- Ereignisse anklicken ----------
 
-   Die Symbole werden beim Zeichnen mit ihrer Bildschirmposition in
-   EREIGNIS_TREFFER abgelegt. Anders geht es nicht: wo ein Symbol landet,
-   ergibt sich erst aus der Auffächerung um den Ort und ist nicht aus den
-   Daten allein zu berechnen. */
-
-const EREIGNIS_TREFFER = [];
-
-function trefferEreignis(mx, my) {
-  // Rückwärts, damit das zuletzt Gezeichnete — also das oben liegende —
-  // zuerst trifft.
-  for (let i = EREIGNIS_TREFFER.length - 1; i >= 0; i--) {
-    const t = EREIGNIS_TREFFER[i];
-    if ((t.x - mx) ** 2 + (t.y - my) ** 2 < 14 * 14) return t;
-  }
-  return null;
-}
-
-/* Alles, was über ein einzelnes Ereignis bekannt ist — und ausdrücklich
-   auch, was nicht bekannt ist. Eine Meldung ist keine Bestätigung. */
-function zeigeEreignis(tr) {
-  const b = tr.b;
-  aktiv = null;
-  AUSWAHL.clear();
-  malAuswahl();
-  document.body.dataset.modus = "welt";
-  modus = "welt";
-  requestAnimationFrame(resize);
-  document.getElementById("pTitel").textContent =
-    (ART_TEXT[tr.art] || tr.art).toUpperCase();
-
-  const zp = zeitpunkt(b.zeit);
-  const ort = b.ortname
-    ? b.ortname.charAt(0).toUpperCase() + b.ortname.slice(1)
-    : null;
-  const zeile = (k, v) => v
-    ? '<div class="ez"><span class="ek2">' + k + "</span><span>" + v +
-      "</span></div>" : "";
-
-  // Flugbahn nur beschreiben, wenn beide Enden im Text standen.
-  const bahn = b.bahn || [];
-  const bahnText = (bahn[0] && bahn[1])
-    ? "Start und Ziel wurden im Text genannt und sind auf der Karte "
-      + "verbunden. Die Linie ist der kürzeste Weg zwischen beiden Punkten, "
-      + "keine gemessene Flugbahn."
-    : null;
-
-  const engen = (b.engen || []).map((id) => {
-    const e = ENGEN.find((y) => y.id === id);
-    return e ? e.name : id;
-  });
-  const sp = SCHAUPLATZ_NACH_ID[b.schauplatz || "sonstige"];
-
-  document.getElementById("pInhalt").innerHTML =
-    '<div class="ekopf">' +
-    (b.arten || []).map((a) => '<span class="eart">' + (ART_TEXT[a] || a) +
-      "</span>").join("") + "</div>" +
-    '<div class="etext">' + String(b.text || "").replace(/[<>&]/g, "") +
-    "</div>" +
-    '<div class="efeld">' +
-    zeile("Ort", ort || "nicht erkannt") +
-    zeile("Schauplatz", sp ? sp.name : null) +
-    zeile("Zeit", b.zeit
-      ? b.zeit.replace("T", " ") + " UTC · " + vorZeit(b.zeit)
-      : '<span class="geschaetzt">Die Quelle liefert keinen Zeitstempel. ' +
-        "Erstmals gesehen " + (b.gesehen ? vorZeit(b.gesehen) : "unbekannt") +
-        " — das ist der Zeitpunkt des Abrufs, nicht der des Ereignisses." +
-        "</span>") +
-    zeile("Quelle", "@" + (b.konto || "?")) +
-    zeile("Meerengen", engen.length ? engen.join(" · ") : null) +
-    "</div>" +
-    (bahnText ? '<div class="ehinweis">' + bahnText + "</div>" : "") +
-    '<div class="ewarn"><b>Ungeprüfte Meldung.</b> Was hier steht, ist der ' +
-    "Text der Quelle, nicht eine Bestätigung. Die Ereignisart wurde aus " +
-    "Stichworten im Text abgeleitet — ein Text über eine Drohne kann auch " +
-    "eine Ankündigung oder ein Dementi sein. Der Ort ist der erste im Text " +
-    "erkannte Ortsname und muss nicht der Ort des Geschehens sein.</div>" +
-    (ort && b.ort
-      ? '<button class="ebtn" id="ezoom">Auf der Karte heranholen</button>'
-      : "") +
-    '<button class="ebtn zweit" id="ezurueck">Zurück zu den Meldungen</button>';
-
-  const zoom = document.getElementById("ezoom");
-  if (zoom) zoom.onclick = () => {
-    const [x, y] = b.ort;
-    fliegeZu([x - 8, y - 6, x + 8, y + 6]);
-  };
-  document.getElementById("ezurueck").onclick = bauFeedPanel;
-  if (zp !== null) markiere(b);
-}
 
 /* Das angeklickte Ereignis auf der Karte hervorheben, damit klar ist,
    welches Symbol gerade im Panel steht. */
-let MARKIERT = null;
-function markiere(b) { MARKIERT = b ? b.id : null; }
+
 
 function trefferMarke(mx, my) {
   for (const e of ENGEN) {
@@ -2228,8 +1402,23 @@ function onMove(ev) {
 
   if (modus === "quiz") {
     hover = null;
-    hoverLand = null;
-    cv.style.cursor = quiz.antwort ? "default" : "crosshair";
+    // Im Länderquiz bleibt die Hervorhebung an — das ist die Rückmeldung,
+    // die zeigt, welche Fläche man gerade treffen würde. Vorher war die
+    // Landsuche hier abgeschaltet und die Karte fühlte sich tot an.
+    // (Beschriftet wird sie nicht, siehe zeichneHover.)
+    if (quizArt === "land" && !quiz.antwort) {
+      if (performance.now() - letzterTest > 60) {
+        letzterTest = performance.now();
+        const [lon, lat] = view.invert(mx, my);
+        hoverLand = landBei(((lon + 180) % 360 + 360) % 360 - 180, lat)
+          || landNahe(mx, my, 12);
+      }
+      cv.style.cursor = hoverLand && LAENDER_QUIZ[hoverLand]
+        ? "pointer" : "crosshair";
+    } else {
+      hoverLand = null;
+      cv.style.cursor = quiz.antwort ? "default" : "crosshair";
+    }
     return;
   }
 
@@ -2248,8 +1437,19 @@ function onMove(ev) {
 
 /* Zeigt an, was unter dem Zeiger liegt — ohne das ist nicht erkennbar, dass
    Länder überhaupt anklickbar sind. */
+/* Hervorhebung des Landes unter dem Zeiger.
+
+   IM QUIZ WIRD DIE FLÄCHE HERVORGEHOBEN, ABER NICHT BESCHRIFTET.
+   Das ist kein Schönheitsdetail: die Namensbox stünde sonst als Lösung
+   unter dem Mauszeiger, und das Spiel wäre wertlos. Der Name erscheint
+   erst nach dem Klick, zusammen mit richtig oder falsch. */
 function zeichneHover() {
-  if (!hoverLand || zieht || modus === "quiz") return;
+  if (!hoverLand || zieht) return;
+  // Im Quiz nur Länder hervorheben, die überhaupt gefragt werden können —
+  // sonst leuchtet Guantanamo Bay auf und führt in die Irre.
+  if (modus === "quiz" && (quizArt !== "land" || !LAENDER_QUIZ[hoverLand])) {
+    return;
+  }
   const l = LAENDER.find((x) => x.n === hoverLand);
   if (!l) return;
   const [vw, vs, ve, vn] = view.bbox;
@@ -2269,6 +1469,9 @@ function zeichneHover() {
   ctx.strokeStyle = AUSWAHL.has(hoverLand) ? "#ff6b6b" : "#00e676";
   ctx.lineWidth = 1.6;
   ctx.stroke();
+
+  // Ab hier nur noch die Beschriftung — im Quiz endet es hier.
+  if (modus === "quiz") return;
 
   const name = (HANDEL[hoverLand] && HANDEL[hoverLand].t) || hoverLand;
   const zusatz = AUSWAHL.has(hoverLand) ? "  ABWÄHLEN"
@@ -2295,18 +1498,13 @@ function zeichneHover() {
 function onClick(ev) {
   const [mx, my] = mausPos(ev);
   if (modus === "quiz") {
-    if (quiz.antwort) return;
-    pruefeAntwort(view.invert(mx, my));
+    pruefeAntwort(mx, my);
     return;
   }
   // Ein Klick, der eigentlich ein Ziehen war, darf nichts auswählen.
   // Der Merker muss getrennt geführt werden: beim Klick ist das Ziehen
   // bereits beendet und zieht wieder null.
   if (gezogen) { gezogen = false; return; }
-  // Ereignisse haben Vorrang: sie liegen oben auf der Karte, also muss sie
-  // ein Klick auch zuerst erwischen.
-  const tr = trefferEreignis(mx, my);
-  if (tr) { zeigeEreignis(tr); return; }
   const e = trefferMarke(mx, my);
   if (e) { zeigeEnge(e); return; }
   // In der Rollen-Ansicht bedeuten die Farben etwas anderes — dort keine
@@ -2348,7 +1546,6 @@ function malAuswahl() {
     };
   });
   bauBogenlegende();
-  if (!AUSWAHL.size) bauFeedPanel();
   if (AUSWAHL.size) {
     document.getElementById("pTitel").textContent =
       "HANDELSPROFIL · " + AUSWAHL.size;
@@ -2489,7 +1686,7 @@ function bauHandelPanel() {
       const engen = h.engen.map((id) => {
         const e = ENGEN.find((x) => x.id === id);
         const a = (ABHAENGIGKEIT[id] || {})[n];
-        const st = STATUS[id] ? STATUS_FARBEN[STATUS[id].s].c : "#8fa6a0";
+        const st = "#8fa6a0";
         return '<div class="eng"><span class="pkt" style="background:' + st +
           '"></span><b>' + (e ? e.name : id) + "</b>" +
           (a ? '<span class="pct">' + a.wert + " % " + a.was + "</span>" +
@@ -2510,149 +1707,23 @@ function bauHandelPanel() {
 
 /* Wie viele Objekte eine Ebene beisteuert — steht im Schalter, damit man
    vorher weiss, was man sich auf die Karte holt. */
-function ebenenAnzahl(id) {
-  // Die Ereignisse kommen aus dem laufenden Abruf, nicht aus einer Datei —
-  // ihre Zahl steht erst fest, wenn Meldungen da sind.
-  if (id === "ereignisse") {
-    return beitraegeImFenster().filter((b) => (b.arten || []).length).length;
-  }
-  return { konflikte: KONFLIKTE.length, ziele: ZIELE.length,
-           kontrolle: KONTROLLZONEN.length, status: Object.keys(STATUS).length,
-           vektoren: VEKTOREN.length, callouts: CALLOUTS.length }[id];
-}
 
-function bauEbenen() {
-  const el = document.getElementById("ebenen");
-  el.innerHTML =
-    EBENEN.map((e) =>
-      '<div class="zeile" data-eb="' + e.id + '" style="color:' + e.farbe + '">' +
-        '<span class="sw"></span>' +
-        '<span class="txt">' + e.t + '</span>' +
-        '<span class="anz">' + ebenenAnzahl(e.id) + '</span>' +
-      "</div>").join("") +
-    '<div class="fuss">Bewertung aus offenen Quellen. Statusangaben ' +
-    'veralten schnell — Datum prüfen.</div>';
-  el.querySelectorAll(".zeile").forEach((z) => {
-    z.onclick = () => schalteEbene(z.dataset.eb);
-  });
-  malEbenen();
-}
 
-function schalteEbene(id) {
-  AN[id] = !AN[id];
-  // Die Grundkarte muss neu, weil die Statusfarben dort nicht drinstecken —
-  // aber der Schluessel enthaelt die Ebenen nicht, also von Hand ungueltig.
-  basisSchluessel = "";
-  malEbenen();
-}
 
-function malEbenen() {
-  document.querySelectorAll("#ebenen .zeile").forEach((z) => {
-    z.classList.toggle("an", !!AN[z.dataset.eb]);
-  });
-  const n = EBENEN.filter((e) => AN[e.id]).length;
-  const z = document.getElementById("ebZahl2");
-  if (z) z.textContent = n + " / " + EBENEN.length + " AKTIV";
-  const lg = document.getElementById("lgEbenen");
-  if (lg) lg.textContent = n + " / " + EBENEN.length;
-}
 
-function bauStatuslegende() {
-  document.getElementById("statuslegende").innerHTML =
-    '<div class="z" style="color:var(--ink2);letter-spacing:1.6px;' +
-    'margin-bottom:6px">CHOKEPOINT-STATUS</div>' +
-    Object.keys(STATUS_FARBEN).map((k) =>
-      '<div class="z"><i style="background:' + STATUS_FARBEN[k].c +
-      ';box-shadow:0 0 7px ' + STATUS_FARBEN[k].c + '"></i>' +
-      STATUS_FARBEN[k].t + "</div>").join("");
-}
+
+
+
+
+
 
 /* Die Meldungsspalte ist der Normalzustand des rechten Fensters. Erst wenn
    man ein Land oder eine Enge anwählt, tritt sie zurück. */
-function bauFeedPanel() {
-  if (AUSWAHL.size || (modus === "detail" && aktiv)) return;
-  markiere(null);
-  document.getElementById("pTitel").textContent = "LAGEMELDUNGEN";
-  const el = document.getElementById("pInhalt");
-  if (!FEED_VERSUCHT) {
-    el.innerHTML = '<div class="leerhinweis">Meldungen werden geladen …</div>';
-    return;
-  }
-  if (!FEED || FEED.fehler) {
-    el.innerHTML = '<div class="leerhinweis">' +
-      (!FEED ? "Der Abruf von <code>api/feed</code> ist fehlgeschlagen: " +
-        (FEED_FEHLER || "unbekannt") +
-        "<br><br>Läuft die Seite über <b>serve.py</b>? Prüfen mit " +
-        "<code>curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/api/feed</code> " +
-        "— das muss 200 ergeben."
-        : FEED.fehler === "nicht eingerichtet"
-          ? 'Noch keine Quelle eingetragen. Oben rechts auf <b>⚙ ZUGÄNGE</b>.'
-          : "Abruf gestört: " + FEED.fehler) + "</div>";
-    return;
-  }
-  const alle = FEED.beitraege || [];
-  const b = beitraegeImFenster();
-  const ereig = b.filter((x) => (x.arten || []).length);
-  const ohneZeit = b.filter((x) => !x.zeit).length;
-  // Kurzlage über den Meldungen: eine Zeile je Kriegsschauplatz, sortiert
-  // nach Betrieb. Damit steht beim Start die Karte im Bild UND daneben,
-  // was gerade wo passiert — ohne einen Klick.
-  const kurz = lageKurz();
-  const zeile = (x, alarm) =>
-    '<div class="' + (alarm ? "ereig" : "meld") + '" data-id="' +
-    String(x.id).replace(/"/g, "") + '">' +
-    '<div class="' + (alarm ? "ek" : "mk") + '">' +
-    (alarm ? x.arten.map((a) => ART_TEXT[a] || a).join(" · ") : "@" + x.konto) +
-    '<span class="' + (x.zeit ? "" : "geschaetzt") + '">' + zeitText(x) +
-    "</span></div>" +
-    '<div class="mt">' + x.text.replace(/[<>&]/g, "") + "</div>" +
-    (x.engen.length ? '<div class="eq">' + x.engen.map((id) => {
-      const e = ENGEN.find((y) => y.id === id);
-      return e ? e.kurz : id;
-    }).join(" · ") + (alarm ? " · @" + x.konto : "") + "</div>" : "") + "</div>";
-  el.innerHTML = kurz +
-    '<div class="feedkopf">' + b.length +
-    (b.length === 1 ? " Meldung in " : " Meldungen in ") + fensterText() +
-    " · " +
-    (ereig.length
-      ? '<b style="color:#ff6b6b">' + ereig.length +
-        (ereig.length === 1 ? " Ereignis</b>" : " Ereignisse</b>")
-      : "keine Ereignisse") +
-    (ohneZeit
-      ? '<div class="fkl">' + ohneZeit + " davon ohne Zeitstempel in der " +
-        "Quelle — für die zählt, wann der Server sie zuerst gesehen hat, " +
-        "nicht wann das Ereignis war.</div>"
-      : "") +
-    (b.length < alle.length
-      ? '<div class="fkl">' + (alle.length - b.length) +
-        ((alle.length - b.length) === 1
-          ? " weitere Meldung ausserhalb des Zeitfensters"
-          : " weitere Meldungen ausserhalb des Zeitfensters") +
-        "" +
-        "</div>"
-      : "") + "</div>" +
-    (ereig.length ? "<h3>Ereignisse</h3>" + ereig.slice(0, 12).map((x) => zeile(x, 1)).join("")
-      : "") +
-    "<h3>Alle Meldungen</h3>" +
-    (b.length ? b.slice(0, 40).map((x) => zeile(x, 0)).join("")
-      : '<div class="leerhinweis">Nichts in diesem Zeitfenster.' +
-        (alle.length ? " Mit <b>ALLES</b> siehst du die älteren." : "") +
-        "</div>");
-  kurzlageKlicks();
-  meldungsKlicks(b);
-}
+
 
 /* Meldungen in der Liste sind dieselben Ereignisse wie auf der Karte —
    also muss ein Klick dort dasselbe Fenster oeffnen. */
-function meldungsKlicks(liste) {
-  document.querySelectorAll("#pInhalt .ereig, #pInhalt .meld").forEach((el) => {
-    const b = liste.find((x) => String(x.id) === el.dataset.id);
-    if (!b) return;
-    el.style.cursor = "pointer";
-    el.onclick = () => zeigeEreignis({ art: (b.arten || [])[0] || "angriff",
-                                       b: b });
-  });
-}
+
 
 /* ---------- Lagebild: eine Kachel je Kriegsschauplatz ----------
 
@@ -2665,210 +1736,25 @@ function meldungsKlicks(liste) {
    Vergleich mit dem Vortag — nicht als Angabe darüber, wie viel wirklich
    geschehen ist. Alles andere wäre eine erfundene Zahl. */
 
-let LAGE = null;
 
-async function holeLage() {
-  try {
-    const r = await fetch("api/lage", { cache: "no-store" });
-    if (r.ok) LAGE = await r.json();
-  } catch (e) { LAGE = null; }
-  if (modus === "lage") bauKacheln();
-  else if (!AUSWAHL.size && modus !== "detail") bauFeedPanel();
-}
 
-/* Status aus den Zahlen ableiten — nie von Hand setzen. Ein handgesetzter
-   Status veraltet unbemerkt; genau das war bei Hormuz schon der Fall. */
-function lageStatus(k) {
-  if (!k || !k.n24) return { s: "still", t: "keine Meldungen in 24 h" };
-  if (k.n24 >= 5 && k.n24 >= 2 * Math.max(k.n48, 1))
-    return { s: "rot", t: "deutlich mehr als am Vortag" };
-  if (k.n24 > k.n48) return { s: "amber", t: "mehr als am Vortag" };
-  if (k.n24 < k.n48) return { s: "gruen", t: "weniger als am Vortag" };
-  return { s: "gruen", t: "wie am Vortag" };
-}
-
-function vorZeit(iso) {
-  if (!iso) return "Zeit unbekannt";
-  const t = Date.parse(iso + (/[Zz+]/.test(iso) ? "" : "Z"));
-  if (isNaN(t)) return "Zeit unbekannt";
-  const min = Math.round((Date.now() - t) / 60000);
-  if (min < 2) return "gerade eben";
-  if (min < 60) return "vor " + min + " Min.";
-  if (min < 48 * 60) return "vor " + Math.round(min / 60) + " Std.";
-  return "vor " + Math.round(min / 1440) + " Tagen";
-}
 
 /* Der eine Satz, der die Kachel erklärt. */
-function lageSatz(k) {
-  if (!k || !k.gesamt) return "Bisher keine Meldung zu diesem Schauplatz.";
-  const arten = Object.entries(k.arten || {}).sort((a, b) => b[1] - a[1]);
-  const teile = [];
-  teile.push(k.n24 + " " + (k.n24 === 1 ? "Meldung" : "Meldungen") +
-    " in 24 Std." + (k.n48 ? " (Vortag: " + k.n48 + ")" : ""));
-  if (arten.length)
-    teile.push("vor allem " +
-      arten.slice(0, 2).map((a) => (ART_TEXT[a[0]] || a[0]).toLowerCase())
-        .join(" und "));
-  if (k.letzte) teile.push("zuletzt " + vorZeit(k.letzte));
-  return teile.join(" · ") + ".";
-}
+
 
 /* Kurzfassung des Lagebilds für die Spalte neben der Karte: eine Zeile je
    Schauplatz, an dem etwas läuft. Klick springt auf die Karte. */
-function lageKurz() {
-  // Aus dem gewählten Zeitfenster gerechnet, nicht aus /api/lage. Sonst
-  // stand hier "letzte 24 Std." während oben eine Woche gewählt war — zwei
-  // verschiedene Zahlen fürs selbe, das verwirrt mehr als es hilft.
-  const b = beitraegeImFenster();
-  if (!b.length) return "";
-  const pro = {};
-  for (const x of b) {
-    const id = x.schauplatz || "sonstige";
-    const k = (pro[id] = pro[id] || { id: id, n: 0, arten: {}, letzte: null });
-    k.n++;
-    for (const a of x.arten || []) k.arten[a] = (k.arten[a] || 0) + 1;
-    const wann = x.zeit || x.gesehen;
-    if (wann && (!k.letzte || wann > k.letzte)) k.letzte = wann;
-  }
-  const liste = Object.values(pro).sort((p, q) => q.n - p.n);
-  return '<div class="kurzlage"><div class="klk">LAGE — ' + fensterText() +
-    "</div>" +
-    liste.slice(0, 7).map((k) => {
-      const s = SCHAUPLATZ_NACH_ID[k.id] || { name: k.id };
-      const arten = Object.entries(k.arten).sort((p, q) => q[1] - p[1]);
-      return '<button class="klz" data-sp="' + k.id + '">' +
-        '<span class="led ' + (arten.length ? "rot" : "gruen") + '"></span>' +
-        '<span class="kln">' + s.name.split(" — ")[0] + "</span>" +
-        '<span class="kla">' +
-        (arten.length
-          ? arten.slice(0, 2).map((a) => ART_TEXT[a[0]] || a[0]).join(", ")
-          : (k.letzte ? vorZeit(k.letzte) : "—")) + "</span>" +
-        '<span class="klc">' + k.n + "</span></button>";
-    }).join("") +
-    '<div class="klf">Meldungen, keine Ereigniszählung · alle ungeprüft · ' +
-    "Klick zoomt die Karte</div></div>";
-}
+
 
 /* Die Klicks der Kurzlage anhängen — das Panel wird als HTML gebaut, die
    Knöpfe brauchen ihre Handler danach. */
-function kurzlageKlicks() {
-  document.querySelectorAll("#pInhalt .klz").forEach((b) => {
-    b.onclick = () => zeigeSchauplatz(b.dataset.sp);
-  });
-}
 
-function bauKacheln() {
-  const el = document.getElementById("kacheln");
-  if (!el) return;
-  const proId = {};
-  ((LAGE || {}).kacheln || []).forEach((k) => { proId[k.id] = k; });
 
-  if (!LAGE) {
-    el.innerHTML = '<div class="leerhinweis">Lagebild wird geladen … ' +
-      "Kommt hier nichts an, läuft die Seite nicht über <b>serve.py</b>.</div>";
-    return;
-  }
-  // Reihenfolge: was am meisten los ist, steht vorn. Leere Schauplätze
-  // bleiben trotzdem sichtbar — "hier ist nichts gemeldet" ist auch eine
-  // Aussage, und ein verschwundener Schauplatz wäre irreführend.
-  const sortiert = SCHAUPLAETZE.slice().sort((a, b) =>
-    ((proId[b.id] || {}).n24 || 0) - ((proId[a.id] || {}).n24 || 0));
 
-  const kopf = '<div class="lagekopf">' +
-    "<b>LAGEBILD</b> · Stand " +
-    ((LAGE.stand || "").replace("T", " ") || "?") + " UTC · " +
-    (LAGE.meldungen || 0) + " Meldungen ausgewertet" +
-    (LAGE.fehler ? ' · <span class="warn">Quelle gestört: ' +
-      String(LAGE.fehler).replace(/[<>&]/g, "").slice(0, 120) + "</span>" : "") +
-    (LAGE.ohne_zeit ? ' · <span class="warn">' + LAGE.ohne_zeit +
-      " ohne Zeitstempel (nicht im 24-Std-Fenster)</span>" : "") +
-    '<div class="lagenote">Gezählt werden <b>Meldungen</b>, nicht Ereignisse. ' +
-    "Zwei Kanäle über denselben Angriff ergeben zwei Meldungen. " +
-    "Der Vergleich mit dem Vortag ist belastbar, die absolute Zahl nicht. " +
-    "Alle Meldungen sind <b>ungeprüft</b>.</div></div>";
-
-  const kacheln = sortiert.map((s) => {
-    const k = proId[s.id];
-    const st = lageStatus(k);
-    const bsp = ((k || {}).beispiele || []).map((b) =>
-      '<div class="kb"><span class="kba">' +
-      (b.arten || []).map((a) => ART_TEXT[a] || a).join(" · ") + "</span>" +
-      (b.ortname ? '<span class="kbo">' + b.ortname + "</span>" : "") +
-      '<span class="kbz">' + vorZeit(b.zeit) + "</span>" +
-      '<div class="kbt">' + String(b.text).replace(/[<>&]/g, "") + "</div></div>"
-    ).join("") || '<div class="kbleer">Keine Ereignismeldung.</div>';
-
-    const engen = (s.engen || []).map((id) => {
-      const e = ENGEN.find((y) => y.id === id);
-      return e ? e.kurz || e.name : id;
-    });
-
-    return '<button class="kachel" data-sp="' + s.id + '">' +
-      '<div class="kk"><span class="led ' + st.s + '"></span>' +
-      '<span class="kn">' + s.name + "</span>" +
-      '<span class="kz">' + ((k || {}).n24 || 0) + "</span></div>" +
-      '<div class="ks">' + lageSatz(k) + "</div>" +
-      '<div class="kt">' + st.t + "</div>" +
-      '<div class="kbs">' + bsp + "</div>" +
-      (engen.length ? '<div class="ke">Betrifft: ' + engen.join(" · ") +
-        "</div>" : "") + "</button>";
-  }).join("");
-
-  const legende = '<div class="symlegende"><b>Zeichen auf der Karte</b>' +
-    Object.keys(ART_TEXT).map((a) =>
-      '<span class="sl"><canvas width="26" height="26" data-art="' + a +
-      '"></canvas>' + ART_TEXT[a] + "</span>").join("") + "</div>";
-
-  el.innerHTML = kopf + '<div class="kachelgitter">' + kacheln + "</div>" + legende;
-
-  el.querySelectorAll(".kachel").forEach((b) => {
-    b.onclick = () => zeigeSchauplatz(b.dataset.sp);
-  });
-  // Die Legende zeichnet dieselben Symbole wie die Karte — aus derselben
-  // Funktion, damit sie nicht auseinanderlaufen können.
-  el.querySelectorAll(".symlegende canvas").forEach((c) => {
-    const g = c.getContext("2d");
-    g.translate(13, 13);
-    g.strokeStyle = "#ff8a8a";
-    g.fillStyle = "#ff8a8a";
-    g.lineWidth = 1.4;
-    g.lineCap = "round";
-    if (ART_SYMBOL[c.dataset.art]) ART_SYMBOL[c.dataset.art](g);
-  });
-}
 
 /* Klick auf eine Kachel: Karte auf den Schauplatz, Panel mit Erklärung
    und allen Meldungen dazu. */
-function zeigeSchauplatz(id) {
-  const s = SCHAUPLATZ_NACH_ID[id];
-  if (!s) return;
-  aktiv = null;
-  AUSWAHL.clear();
-  setModus("welt");
-  fliegeZu(s.bbox);
-  document.getElementById("pTitel").textContent = s.name.toUpperCase();
-  const b = ((FEED || {}).beitraege || []).filter(
-    (x) => (x.schauplatz || "sonstige") === id);
-  const zeile = (x) =>
-    '<div class="' + ((x.arten || []).length ? "ereig" : "meld") + '">' +
-    '<div class="' + ((x.arten || []).length ? "ek" : "mk") + '">' +
-    ((x.arten || []).length
-      ? x.arten.map((a) => ART_TEXT[a] || a).join(" · ")
-      : "@" + x.konto) +
-    '<span class="' + (x.zeit ? "" : "geschaetzt") + '">' + zeitText(x) +
-    "</span></div>" +
-    (x.ortname ? '<div class="eq">' + x.ortname + "</div>" : "") +
-    '<div class="mt">' + String(x.text).replace(/[<>&]/g, "") + "</div>" +
-    '<div class="eq">@' + x.konto + " · ungeprüft</div></div>";
-  document.getElementById("pInhalt").innerHTML =
-    '<div class="worum"><b>Worum geht es hier</b><p>' + s.worum + "</p></div>" +
-    '<div class="feedkopf">' + b.length + " Meldungen zu diesem Schauplatz" +
-    "</div>" +
-    (b.length ? b.slice(0, 60).map(zeile).join("")
-      : '<div class="leerhinweis">Keine Meldung zugeordnet. Das heisst ' +
-        "nicht, dass nichts passiert — nur, dass die eingetragenen Quellen " +
-        "nichts dazu geliefert haben.</div>");
-}
+
 
 /* ---------- Panel und Liste ---------- */
 
@@ -2900,17 +1786,6 @@ function bauPanel(e) {
       zeile("Breite", e.breite) +
       zeile("Verkehr", e.menge) +
       zeile("Anrainer", e.anrainer) +
-      (LIVE && LIVE.werte[e.id] ? zeile("Live",
-        '<b style="color:var(--phos)">' + LIVE.werte[e.id].n +
-        " Schiffe/Tag</b><br><span style=\"color:var(--dim)\">Stand " +
-        LIVE.werte[e.id].d + " · IMF PortWatch</span>") : "") +
-      (statusVon(e.id) ? (function (sv) {
-        return zeile("Status",
-          '<span style="color:' + STATUS_FARBEN[sv.s].c + '">■ ' +
-          STATUS_FARBEN[sv.s].t + "</span><br>" + sv.b +
-          '<br><span style="color:var(--dim);font-size:10px">Quelle: ' +
-          sv.quelle + "</span>");
-      })(statusVon(e.id)) : "") +
       zeile("Kontrolle", e.betroffen.kontrolle
         .map((k) => "<b>" + k.t + "</b> — " + k.rolle).join("<br>")) +
     "</div>" +
@@ -2956,27 +1831,256 @@ function bauListe() {
   });
 }
 
+/* ---------- Länderquiz ----------
+
+   Ein Land wird genannt, man klickt es auf der Karte an.
+
+   SCHWIERIGKEIT WIRD ABGELEITET, NICHT GESETZT.
+   Aus zwei Grössen, die beide schon vorliegen: der Fläche aus der Geometrie
+   und dem Bruttoinlandsprodukt aus den WTO-Daten. Gross und wirtschaftlich
+   gewichtig heisst bekannt; klein und abgelegen heisst schwer. Eine
+   handgepflegte Einstufung würde veralten und wäre reine Geschmackssache —
+   dieselbe Regel wie überall im Projekt.
+
+   Beide Grössen gehen logarithmisch ein, sonst erschlägt Russland alles. */
+
+let quizArt = "land";        // land | enge
+
+const STUFEN = [
+  { id: "einfach", t: "EINFACH", n: 40 },
+  { id: "mittel", t: "MITTEL", n: 90 },
+  { id: "schwer", t: "SCHWER", n: 999 },
+];
+let stufe = "einfach";
+
+/* Nach Bekanntheit sortierte Länderliste, einmal berechnet. */
+let RANGLISTE = null;
+
+function bauRangliste() {
+  const roh = [];
+  for (const l of LAENDER) {
+    const de = LAENDER_QUIZ[l.n];
+    if (!de) continue;               // Gebiet, Stützpunkt, umstritten
+    roh.push({ n: l.n, de: de, flaeche: l.echteFlaeche,
+               bip: (WTO[l.n] && WTO[l.n].bip) || null });
+  }
+
+  // Über RÄNGE rechnen, nicht über die Rohwerte. Zwei Gründe: die
+  // Grössenordnungen sind völlig verschieden (Quadratgrad gegen Milliarden
+  // Dollar), und Ausreisser wie Russland würden jede Skala verziehen.
+  const rang = (feld, liste) => {
+    const mit = liste.filter((x) => x[feld] != null)
+      .sort((a, b) => a[feld] - b[feld]);
+    const m = {};
+    mit.forEach((x, i) => { m[x.n] = i / Math.max(1, mit.length - 1); });
+    return m;
+  };
+  const rFlaeche = rang("flaeche", roh);
+  const rBip = rang("bip", roh);
+
+  for (const x of roh) {
+    // Fehlt das BIP, zählt die Fläche doppelt — NICHT null einsetzen.
+    // Kuba, Nordkorea und Somalia führt die WTO nicht; mit einer Null
+    // landeten sie zwischen Nauru und Monaco unter den schwersten Ländern,
+    // was offensichtlich falsch ist.
+    const rb = rBip[x.n] !== undefined ? rBip[x.n] : rFlaeche[x.n];
+    x.wert = rFlaeche[x.n] * 0.6 + rb * 0.4;
+    x.geschaetzt = rBip[x.n] === undefined;
+  }
+  roh.sort((a, b) => b.wert - a.wert);
+  return roh;
+}
+
+/* Die Länder einer Stufe. Jede Stufe enthält alles Leichtere mit —
+   „schwer" heisst mehr Auswahl, nicht nur die Zwergstaaten. */
+function laenderDerStufe(id) {
+  if (!RANGLISTE) RANGLISTE = bauRangliste();
+  const s = STUFEN.find((x) => x.id === id) || STUFEN[0];
+  return RANGLISTE.slice(0, Math.min(s.n, RANGLISTE.length));
+}
+
+function bauStufen() {
+  const el = document.getElementById("stufen");
+  if (!el) return;
+  el.innerHTML = STUFEN.map((s) =>
+    '<button class="sb' + (s.id === stufe ? " an" : "") + '" data-s="' + s.id +
+    '">' + s.t + " <span>" + laenderDerStufe(s.id).length + "</span></button>"
+  ).join("");
+  el.querySelectorAll(".sb").forEach((b) => {
+    b.onclick = () => {
+      stufe = b.dataset.s;
+      bauStufen();
+      quiz.rest = [];
+      quiz.punkte = 0;
+      quiz.runden = 0;
+      naechsteFrage();
+    };
+  });
+}
+
 /* ---------- Quiz ---------- */
 
+/* Die nächste Frage stellen.
+
+   Bei Zwergstaaten fährt die Karte vorher in die Region. Ohne das wäre die
+   Frage unfair statt schwer: 49 Länder sind bei Weltzoom kleiner als ein
+   Pixel — Monaco, Nauru, Malta, Singapur. Man muss immer noch wissen, wo
+   sie liegen, aber man sieht das Ziel. */
 function naechsteFrage() {
-  if (!quiz.rest.length) quiz.rest = ENGEN.slice().sort(() => Math.random() - 0.5);
+  if (quizArt === "enge") return naechsteEngenFrage();
+  const pool = laenderDerStufe(stufe);
+  if (!quiz.rest.length) {
+    quiz.rest = pool.slice().sort(() => Math.random() - 0.5);
+  }
   quiz.frage = quiz.rest.pop();
   quiz.antwort = null;
-  fliegeZu(WELT_BBOX);
-  document.getElementById("qfrage").textContent =
-    "Wo liegt: " + quiz.frage.name + "?";
-  document.getElementById("qhilfe").textContent = "Klick auf die Karte.";
+  quiz.gezeigt = null;
+
+  const mitte = landMitte(quiz.frage.n);
+  // Schwelle in Quadratgrad: darunter ist ein Land auf der Weltkarte nicht
+  // mehr als Fläche erkennbar.
+  const winzig = quiz.frage.flaeche < 2.5;
+  quiz.gezoomt = winzig && !!mitte;
+  if (quiz.gezoomt) {
+    // Weit genug, dass die Nachbarschaft sichtbar bleibt — es soll eine
+    // Ortskenntnisfrage bleiben, keine Klickübung auf ein leeres Feld.
+    const r = Math.max(9, Math.sqrt(quiz.frage.flaeche) * 8);
+    fliegeZu([mitte[0] - r, mitte[1] - r * 0.62,
+              mitte[0] + r, mitte[1] + r * 0.62]);
+  } else {
+    fliegeZu(WELT_BBOX);
+  }
+
+  document.getElementById("qfrage").textContent = quiz.frage.de;
+  document.getElementById("qhilfe").textContent = quiz.gezoomt
+    ? "Kleines Land — die Karte ist schon herangefahren."
+    : "Klick das Land auf der Karte an.";
   document.getElementById("qergebnis").textContent = "";
+  document.getElementById("qergebnis").className = "";
   document.getElementById("weiter").hidden = true;
   zeigePunkte();
 }
 
-function pruefeAntwort(ll) {
+/* Antwort prüfen.
+
+   Gewertet wird der Ländertreffer, nicht die Entfernung: Entweder man hat
+   das richtige Land angeklickt oder nicht. Die Entfernung steht trotzdem
+   dabei — „800 km daneben" sagt einem mehr als ein blosses Falsch. */
+function pruefeAntwort(mx, my) {
+  if (quiz.antwort) return;
+  if (quizArt === "enge") return pruefeEngenAntwort(mx, my);
+  const [lon, lat] = view.invert(mx, my);
+  const getroffen = landBei(((lon + 180) % 360 + 360) % 360 - 180, lat)
+    || landNahe(mx, my, 12);
+  quiz.antwort = getroffen || "—";
+  quiz.runden++;
+
+  const richtig = getroffen === quiz.frage.n;
+  if (richtig) quiz.punkte++;
+  quiz.gezeigt = quiz.frage.n;
+
+  const el = document.getElementById("qergebnis");
+  if (richtig) {
+    el.textContent = "Richtig.";
+    el.className = "gut";
+  } else {
+    const ziel = landMitte(quiz.frage.n);
+    const km = ziel ? Math.round(distKm([lon, lat], ziel)) : null;
+    const wo = getroffen
+      ? (LAENDER_QUIZ[getroffen] || getroffen)
+      : "ins Wasser";
+    el.textContent = "Das war " + wo +
+      (km !== null ? " — " + km.toLocaleString("de-CH") + " km daneben." : ".");
+    el.className = km !== null && km < 1200 ? "ok" : "schlecht";
+  }
+  document.getElementById("qhilfe").textContent = "";
+  document.getElementById("weiter").hidden = false;
+
+  // Das gesuchte Land aufdecken und, falls es weit weg liegt, hinfahren.
+  if (!richtig) {
+    const m = landMitte(quiz.frage.n);
+    if (m && !quiz.gezoomt) {
+      const r = Math.max(14, Math.sqrt(quiz.frage.flaeche) * 6);
+      fliegeZu([m[0] - r, m[1] - r * 0.62, m[0] + r, m[1] + r * 0.62]);
+    }
+  }
+  zeigeInfokarte(quiz.frage.n);
+  zeigePunkte();
+}
+
+/* Nach der Antwort: was man über das Land wissen kann.
+
+   Das ist der Unterschied zwischen einem Klickspiel und einem Lernwerkzeug.
+   Die Zahlen liegen ohnehin da (WTO Trade Profiles) — hier bekommen sie
+   einen Anlass. */
+function zeigeInfokarte(name) {
+  const el = document.getElementById("qinfo");
+  if (!el) return;
+  const w = WTO[name];
+  const h = HANDEL[name];
+  const de = LAENDER_QUIZ[name] || name;
+  if (!w && !h) {
+    el.innerHTML = '<b>' + de + "</b> — für dieses Land liegen keine " +
+      "Handelsdaten vor.";
+    el.hidden = false;
+    return;
+  }
+  const teile = [];
+  if (h && h.kern) teile.push(h.kern);
+  if (w && w.wAus) {
+    const g = [["Agrarprodukte", w.wAus.agrar],
+               ["Brennstoffe und Bergbau", w.wAus.energie],
+               ["Industriegüter", w.wAus.industrie]]
+      .filter((x) => x[1] != null).sort((a, b) => b[1] - a[1])[0];
+    if (g) teile.push("führt überwiegend " + g[0] + " aus (" +
+      zahl1(g[1]) + " %)");
+  }
+  if (w && w.pAus && w.pAus.length) {
+    const ab = w.pAus[0];
+    const abName = ab.l === "European Union" ? "die EU"
+      : (HANDEL[ab.l] && HANDEL[ab.l].t) || LAENDER_QUIZ[ab.l] || ab.l;
+    teile.push("grösster Abnehmer " + abName + " (" + zahl1(ab.p) + " %)");
+  }
+  if (h && h.engen && h.engen.length) {
+    teile.push("hängt an " + h.engen.map((id) => {
+      const e = ENGEN.find((x) => x.id === id);
+      return e ? e.kurz || e.name : id;
+    }).join(" und "));
+  }
+  el.innerHTML = "<b>" + de + "</b> " + teile.join(" · ") +
+    (w ? '<span class="q">— WTO Trade Profiles 2023, S. ' + w.seite +
+         "</span>" : "");
+  el.hidden = false;
+}
+
+/* ---------- Meerengen-Quiz ----------
+
+   Die zweite Variante, unverändert im Wesen: hier zählt die Entfernung,
+   nicht der Ländertreffer — eine Meerenge ist eine Stelle, kein Gebiet. */
+
+function naechsteEngenFrage() {
+  if (!quiz.rest.length) {
+    quiz.rest = ENGEN.slice().sort(() => Math.random() - 0.5);
+  }
+  quiz.frage = quiz.rest.pop();
+  quiz.antwort = null;
+  quiz.gezoomt = false;
+  fliegeZu(WELT_BBOX);
+  document.getElementById("qfrage").textContent = quiz.frage.name;
+  document.getElementById("qhilfe").textContent =
+    "Klick auf die Stelle in der Karte.";
+  document.getElementById("qergebnis").textContent = "";
+  document.getElementById("qergebnis").className = "";
+  document.getElementById("qinfo").hidden = true;
+  document.getElementById("weiter").hidden = true;
+  zeigePunkte();
+}
+
+function pruefeEngenAntwort(mx, my) {
+  const ll = view.invert(mx, my);
   quiz.antwort = ll;
   const km = Math.round(distKm(ll, quiz.frage.pos));
   quiz.runden++;
-  // Bewertung nach Entfernung: unter 500 km hat man die Stelle wirklich
-  // getroffen, unter 1500 die Region.
   let txt, cls;
   if (km < 500) {
     txt = "Sitzt. " + km + " km daneben.";
@@ -2986,12 +2090,16 @@ function pruefeAntwort(ll) {
     txt = "Richtige Ecke — " + km + " km daneben.";
     cls = "ok";
   } else {
-    txt = km + " km daneben.";
+    txt = km.toLocaleString("de-CH") + " km daneben.";
     cls = "schlecht";
   }
   const el = document.getElementById("qergebnis");
-  el.textContent = txt + " " + quiz.frage.name + ": " + quiz.frage.region + ".";
+  el.textContent = txt;
   el.className = cls;
+  const info = document.getElementById("qinfo");
+  info.innerHTML = "<b>" + quiz.frage.name + "</b> " + quiz.frage.region +
+    " · " + quiz.frage.breite + " · " + quiz.frage.menge;
+  info.hidden = false;
   document.getElementById("qhilfe").textContent = "";
   document.getElementById("weiter").hidden = false;
   zeigePunkte();
@@ -3000,6 +2108,17 @@ function pruefeAntwort(ll) {
 function zeigePunkte() {
   document.getElementById("qpunkte").textContent =
     quiz.punkte + " / " + quiz.runden;
+  const a = document.getElementById("lgAnzahl");
+  const st = document.getElementById("lgStufe");
+  const p = document.getElementById("lgPunkte");
+  if (a) a.textContent = quizArt === "land"
+    ? laenderDerStufe(stufe).length : ENGEN.length;
+  if (st) st.textContent = quizArt === "land"
+    ? (STUFEN.find((x) => x.id === stufe) || {}).t : "MEERENGEN";
+  if (p) p.textContent = quiz.runden
+    ? quiz.punkte + " / " + quiz.runden +
+      " (" + Math.round(quiz.punkte / quiz.runden * 100) + " %)"
+    : "–";
 }
 
 addEventListener("DOMContentLoaded", init);

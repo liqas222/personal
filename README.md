@@ -1,30 +1,40 @@
-# Atlas — Meerengen der Weltpolitik
+# Atlas — Länder und Meerengen finden
 
-Ein Lernwerkzeug für Geopolitik: die Karte, die beim Zuhören fehlt. Wo liegt
-die Strasse von Hormuz, warum ist sie wichtig, was passiert, wenn sie zugeht —
-und wo genau ist das eigentlich auf dem Globus?
+Ein Lernwerkzeug für Geografie und Geopolitik. Ein Land wird genannt, du
+klickst es auf der Weltkarte an. Beim Überfahren leuchtet die Landfläche auf,
+aber ohne Namen — der käme sonst als Lösung unter dem Mauszeiger. Nach dem
+Klick wird aufgedeckt: richtig oder falsch, wie weit daneben, und was das
+Land eigentlich handelt.
 
-Aufgemacht als Operationsmonitor: dunkles HUD, Phosphorgrün und Amber,
-Klassifizierungsbanner, Statusleiste. Das ist **Gestaltung, kein echtes
-Lagebild** — es steht ein Übungsvermerk daneben, damit die Karte nicht mit
-einem Verschlusssachen-Produkt verwechselt werden kann. Alle Inhalte stammen
-aus offenen Quellen, die Statuseinstufungen sind Bewertung, keine Meldung.
+**Drei Schwierigkeitsstufen**, abgeleitet statt gesetzt: aus der tatsächlichen
+Landfläche und dem Bruttoinlandsprodukt (WTO Trade Profiles 2023). Gross und
+wirtschaftlich gewichtig heisst bekannt, klein und abgelegen heisst schwer.
 
-Drei Ansichten:
+- **Einfach** — 40 Länder, von den Vereinigten Staaten bis Saudi-Arabien
+- **Mittel** — 90 Länder
+- **Schwer** — alle 194, bis hinunter zu Nauru, San Marino und Tuvalu
 
-- **Weltkarte** — alle Meerengen als Marker. Klick zoomt an die Enge heran.
-- **Meerengen** — dieselben Orte als Liste zum Durchblättern.
-- **Quiz** — „Wo liegt Bab el-Mandeb?", du klickst auf die Weltkarte, es misst
-  die Entfernung zur richtigen Stelle in Kilometern. Das ist der Teil, von dem
-  Geografie tatsächlich hängen bleibt.
+Bei Zwergstaaten fährt die Karte vorher in die Region. Ohne das wäre die Frage
+nicht schwer, sondern unfair: 49 Länder sind bei Weltzoom kleiner als ein
+Pixel.
 
-**Ebenen** (rechts zuschaltbar, damit die Karte nicht zukleistert):
-Aktuelle Konflikte und Chokepoint-Status sind voreingestellt an, militärische
-Ziele, Kontroll- und Blockadezonen, Kraftvektoren und Intel-Callouts aus. Die
-Ebenen gelten auch im Zoom auf eine einzelne Enge.
+**Zweite Quizvariante: Meerengen.** „Wo liegt Bab el-Mandeb?" — hier zählt die
+Entfernung statt des Ländertreffers, denn eine Meerenge ist eine Stelle und
+kein Gebiet.
+
+**Weltkarte und Meerengen** bleiben als Nachschlagewerk erhalten: Klick auf ein
+Land zeigt sein Handelsprofil mit echten Anteilen, Klick auf einen Marker
+zoomt an die Enge heran, mit Seewegen, Anrainern und wovon wer abhängt.
 
 Enthalten sind neun Nadelöhre: Hormuz, Bab el-Mandeb, Suez, Malakka, Taiwan,
 Bosporus/Dardanellen, Panama, Gibraltar, Dänische Meerengen.
+
+## Was NICHT drin ist
+
+Kein Konto, kein Schlüssel, kein Abruf nach draussen, keine laufenden Kosten.
+Die Seite besteht aus statischen Dateien. `serve.py` liefert sie aus und tut
+sonst nichts — er wird nur gebraucht, wenn die Seite unter einer festen
+Adresse und hinter einem Passwort stehen soll.
 
 ## Starten
 

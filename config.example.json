@@ -1,8 +1,5 @@
 {
   "host": "0.0.0.0",
   "port": 80,
-  "auth_token": "",
-
-  "_tg": "Bot bei @BotFather anlegen. Kostenlos. Der Bot sieht nur Kanaele und Gruppen, in denen er Mitglied ist.",
-  "tg_token": ""
+  "auth_token": ""
 }

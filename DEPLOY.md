@@ -60,6 +60,13 @@ tailscale funnel status          # nur lesen: SwissIntel muss weiter "Funnel on"
 Dann die URL im Browser öffnen. Benutzername ist egal, Passwort ist der
 `auth_token`. Falls noch die alte Seite erscheint: Strg+Shift+R.
 
+## Der Server ruft nichts mehr ab
+
+Seit dem Umbau zum Quiz liefert `serve.py` nur noch Dateien aus: kein
+Telegram, keine Feeds, keine Live-Abrufe, keine Hintergrundschleifen. In
+`config.json` zählt nur noch `host`, `port` und `auth_token`. Alte Einträge
+wie `tg_token` oder `web_quellen` schaden nicht, werden aber ignoriert.
+
 ## Update (nach jedem Push)
 
 ```bash
