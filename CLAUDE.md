@@ -10,6 +10,21 @@ einmal an Feed, Telegram, PortWatch und Lagebild dranhing, ist entfernt — wer
 es zurückholen will, findet es in der Git-Historie, aber nicht in diesem
 Stand.
 
+## Nach jeder Änderung: den Befehl dazuschreiben
+
+Wenn etwas fertig und gepusht ist, gehört **immer** der Befehl in die Antwort,
+mit dem es auf den Server kommt — nicht nur die Aussage, dass gepusht wurde.
+Ein Push ändert den Droplet nicht, und das hat schon zweimal zu der Frage
+geführt, warum sich nichts tut.
+
+```bash
+cd /opt/atlas && sudo git pull && sudo systemctl restart atlas && sudo systemctl status atlas --no-pager | head -4
+```
+
+Dazu gehört der Hinweis auf **Strg+Shift+R** und die erwartete `BAU`-Kennung
+aus der Statusleiste — sonst lässt sich nicht unterscheiden, ob die Änderung
+fehlt oder ob der Browser die alte Datei zeigt.
+
 ## Grundsätze
 
 - **Keine Abhängigkeiten.** Python nur Standardbibliothek (nur für den
