@@ -19,13 +19,13 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 72 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 75 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
 | **Live-Abruf Amtsblattportal** | **läuft**, gegen den echten Dienst geprüft: 60 Fälle beim ersten 7-Tage-Lauf |
-| Zweckartikel aus dem Handelsregister | **gebaut**, gegen einen Nachbau geprüft — beim echten Dienst mit `radar.pruefen` Schritt 5 bestätigen |
+| Zweckartikel aus dem Handelsregister | **läuft**, gegen den echten Dienst geprüft: 38 von 38 gefunden |
 | Zweck für bestehende Fälle nachtragen | **läuft**, Knopf „Zweck nachtragen“ bzw. `--zweck-nachtragen` |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
@@ -342,6 +342,47 @@ Jede Zeile der Bewertung nennt Punkte, Grund und Herkunft des Signals:
 +15  Steigerung oder Verwertung angekündigt — Verwertung läuft
 ```
 
+### Die Schwelle war falsch — 50 statt 60
+
+Der erste echte Lauf mit Zweckartikeln: **40 Fälle, keiner über 60.**
+Nicht weil nichts dabei war, sondern weil die Schwelle unerreichbar war.
+
+```
++30  Branche erkannt (das stärkste Signal, mehr gibt es nicht)
++20  älter als fünf Jahre
++5   Konkurs eröffnet
+---
+ 55  eine zwanzigjährige Garage am Tag der Konkurseröffnung
+```
+
+Die 60 stammen aus der ursprünglichen Spezifikation, in der zusätzlich
+**45 Punkte aus der Firmenwebsite** kommen sollten. Diese Anreicherung
+wurde gestrichen (siehe unten) — die Schwelle blieb stehen. Das war ein
+Fehler: eine Linie, die zu einer Rechnung gehörte, die es nicht mehr gibt.
+
+**50** ist so gewählt, dass „Branche erkannt UND älter als fünf Jahre"
+durchkommt. Genau die Kombination, bei der ein Anruf beim Konkursamt sich
+lohnt. Die Gewichte sind unverändert; verschoben wurde nur die Linie.
+
+Die Schwelle steht an **einer** Stelle (`bewertung.SCHWELLE`) und wird von
+Oberfläche, Zählung und Tagesmeldung von dort geholt.
+
+### Das Gründungsdatum kommt auch aus dem Handelsregister
+
+Das Firmenalter ist 20 von 55 erreichbaren Punkten. In der
+Konkurspublikation steht es oft nicht — im Handelsregistereintrag immer,
+und den holen wir für den Zweck ohnehin schon. Es wird deshalb aus
+derselben Anfrage mitgenommen. Ohne das bliebe eine zwanzigjährige Garage
+bei 35 statt 55.
+
+### Der Score filtert nicht mehr, er sortiert
+
+Die Oberfläche startete mit „Score ab 60" als hartem Filter und zeigte
+deshalb zweimal eine leere Liste, obwohl Fälle da waren. Das widersprach
+dem eigenen Grundsatz — der Score ist eine **Sortierhilfe**. Jetzt startet
+sie bei 0, sortiert nach Score, und die Fusszeile sagt, wie viele über der
+Schwelle liegen. Wer filtern will, stellt es ein.
+
 ### Abweichung von der ursprünglichen Spezifikation
 
 Der Entwurf wollte Punkte dafür vergeben, ob die Firmenwebsite Fahrzeuge
@@ -452,7 +493,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            72 Tests, kein Netz nötig
+└── tests/            75 Tests, kein Netz nötig
 ```
 
 ### Tests

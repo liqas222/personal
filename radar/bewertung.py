@@ -16,7 +16,34 @@ Deshalb liefert jede Bewertung ihre Zeilen einzeln mit — Punkte, Grund und
 woher das Signal stammt. Eine Zahl ohne Herleitung wäre hier wertlos.
 """
 
-SCHWELLE = 60
+# Ab hier lohnt das Nachfragen beim Konkursamt.
+#
+# WARUM 50 UND NICHT 60 — das war ein Fehler, und zwar ein grober
+# ---------------------------------------------------------------
+# Die 60 stammen aus der ursprünglichen Spezifikation. Dort sollten bis zu
+# **45 Punkte** aus der Firmenwebsite kommen (Fahrzeuge sichtbar +15,
+# eigener Standort +10, Flotte +10, mehr als zehn Mitarbeitende +10). Diese
+# Anreicherung ist bewusst nicht gebaut worden — bei einer Konkursitin ist
+# die Website meist schon abgeschaltet, gerade dann, wenn man sie bräuchte.
+#
+# Die Anreicherung fiel weg, die Schwelle blieb. Damit war sie aus
+# amtlichen Daten allein nicht mehr erreichbar:
+#
+#     +30  Branche erkannt (das stärkste Signal, mehr gibt es nicht)
+#     +20  älter als fünf Jahre
+#     +5   Konkurs eröffnet
+#     ---
+#      55  eine zwanzigjährige Garage am Tag der Konkurseröffnung
+#
+# Der erste echte Lauf hat es bewiesen: 40 Fälle mit Zweckartikel, **kein
+# einziger** über 60. Nicht weil nichts dabei war, sondern weil der beste
+# vorstellbare Fall im häufigsten Verfahrensstadium 55 erreicht.
+#
+# 50 ist so gewählt, dass „Branche erkannt UND älter als fünf Jahre"
+# durchkommt — genau die Kombination, bei der ein Anruf beim Konkursamt
+# sich lohnt. Die Gewichte bleiben unverändert; verschoben wird nur die
+# Linie, die ohne die gestrichene Anreicherung nie gestimmt hat.
+SCHWELLE = 50
 
 # Signale, die NICHT aus amtlichen Daten stammen, sondern aus Anreicherung.
 # Sie werden getrennt gezählt, damit sichtbar bleibt, wie viel der Score

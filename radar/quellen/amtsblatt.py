@@ -422,7 +422,20 @@ class AmtsblattQuelle(Quelle):
                      "keyword", "searchTerm", "fullText")
 
     def _zweck_zu_uid(self, uid):
-        """Den Zweckartikel zu einer UID suchen. None, wenn nichts da ist.
+        """Nur den Zweck — für Aufrufer, die sonst nichts brauchen."""
+        return (self._hr_daten(uid) or {}).get("zweck")
+
+    def _hr_daten(self, uid):
+        """Zweck UND Gründungsdatum zu einer UID suchen.
+
+        Beides kommt aus derselben Publikation, also aus derselben
+        Anfrage. Das Gründungsdatum extra zu holen wäre Verschwendung —
+        es hier mitzunehmen kostet nichts.
+
+        WARUM DAS GRÜNDUNGSDATUM WICHTIG IST: das Firmenalter ist 20 von
+        maximal 55 erreichbaren Punkten. Fehlt es, kommt auch ein
+        einwandfreier Fall nicht über 35. In der Konkurspublikation steht
+        es oft nicht, im Handelsregistereintrag dagegen immer.
 
         Welcher Parameter die Suche nach einer UID entgegennimmt, ist
         nicht dokumentiert. Statt zu raten wird er einmal ausprobiert und
@@ -434,7 +447,7 @@ class AmtsblattQuelle(Quelle):
 
         namen = ([self.uid_parameter] if self.uid_parameter
                  else list(self.UID_PARAMETER))
-        zweck = None
+        daten = None
         for name in namen:
             try:
                 treffer = self._hr_suchen(name, uid)
@@ -447,11 +460,11 @@ class AmtsblattQuelle(Quelle):
                 self.uid_parameter = name
                 self.protokoll.append(
                     "Zwecksuche läuft über den Parameter %s" % name)
-            zweck = self._zweck_aus_publikation(treffer[0]["id"])
+            daten = self._hr_publikation_lesen(treffer[0]["id"])
             break
 
-        self._zweck_zwischenspeicher[uid] = zweck
-        return zweck
+        self._zweck_zwischenspeicher[uid] = daten
+        return daten
 
     def _hr_suchen(self, parameter, uid):
         felder = [(parameter, uid), ("pageRequest.size", "5")]
@@ -463,12 +476,21 @@ class AmtsblattQuelle(Quelle):
         code, roh = self._hole(url)
         return self._liste_lesen(roh)
 
-    def _zweck_aus_publikation(self, pub_id):
+    def _hr_publikation_lesen(self, pub_id):
+        """Zweck und Gründungsdatum aus einer HR-Publikation."""
         url = "%s/publications/%s/xml" % (self.basis, pub_id)
         code, roh = self._hole(url, "application/xml")
         wurzel = ET.fromstring(roh.decode("utf-8", "replace"))
-        return _text(wurzel, "purpose", "zweck", "businessPurpose",
-                     "companyPurpose")
+        return {
+            "zweck": _text(wurzel, "purpose", "zweck", "businessPurpose",
+                           "companyPurpose"),
+            "gruendung": _text(wurzel, "registrationDate", "foundingDate",
+                               "entryDate", "firstEntryDate"),
+        }
+
+    def _zweck_aus_publikation(self, pub_id):
+        """Nur der Zweck — von radar.pruefen benutzt."""
+        return self._hr_publikation_lesen(pub_id).get("zweck")
 
     # -- Hauptlauf --------------------------------------------------------
 
@@ -554,16 +576,24 @@ class AmtsblattQuelle(Quelle):
         zwecke, ohne_zweck = 0, 0
         if self.zweck_nachschlagen:
             for satz in raus[:self.max_zweck]:
-                if satz.get("zweck") or not satz.get("uid"):
+                if not satz.get("uid"):
+                    continue
+                if satz.get("zweck") and satz.get("gruendung"):
                     continue
                 try:
-                    z = self._zweck_zu_uid(satz["uid"])
+                    hr = self._hr_daten(satz["uid"]) or {}
                 except Exception as e:
                     self.protokoll.append("Zwecksuche %s: %s"
                                           % (satz["uid"], e))
                     continue
-                if z:
-                    satz["zweck"] = z
+                if hr.get("zweck") and not satz.get("zweck"):
+                    satz["zweck"] = hr["zweck"]
+                # Das Gründungsdatum kommt aus derselben Anfrage und ist
+                # 20 von 55 möglichen Punkten wert — es hier liegen zu
+                # lassen wäre die teuerste Art von Sparsamkeit.
+                if hr.get("gruendung") and not satz.get("gruendung"):
+                    satz["gruendung"] = hr["gruendung"]
+                if hr.get("zweck"):
                     zwecke += 1
                 else:
                     ohne_zweck += 1

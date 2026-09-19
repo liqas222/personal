@@ -138,6 +138,40 @@ class TestBewertung(unittest.TestCase):
         self.assertFalse(b["hat_anreicherung"])
         self.assertGreaterEqual(b["nur_amtlich"], bewertung.SCHWELLE)
 
+    def test_musterfall_bei_konkurseroeffnung_kommt_durch(self):
+        """Der Fall, an dem die alte Schwelle scheiterte.
+
+        Eine zwanzigjährige Garage am Tag der Konkurseröffnung ist das,
+        wofür dieses Werkzeug gebaut ist. Mit der Schwelle 60 erreichte
+        sie strukturell nur 55 — weil die 60 aus einer Spezifikation
+        stammten, in der zusätzlich 45 Punkte aus der Firmenwebsite
+        kommen sollten. Diese Anreicherung wurde gestrichen, die
+        Schwelle blieb. 40 echte Fälle, keiner über 60, war die Folge.
+        """
+        f = self._fall(firma="Meier Garage AG",
+                       zweck="Betrieb einer Garage, Handel mit "
+                             "Motorfahrzeugen",
+                       gruendung="2006-01-01",
+                       meldungsart="Konkurseröffnung")
+        k = klassierung.klassieren(f["zweck"], f["rohtext"])
+        b = bewertung.bewerten(f, k)
+        self.assertGreaterEqual(b["score"], bewertung.SCHWELLE)
+        self.assertFalse(b["hat_anreicherung"])
+
+    def test_ohne_gruendungsdatum_reicht_es_nicht(self):
+        """Das Firmenalter ist 20 von 55 Punkten — es fehlt zu oft.
+
+        Deshalb wird das Gründungsdatum aus dem Handelsregistereintrag
+        mitgeholt. Ohne es bleibt derselbe Fall unter der Schwelle.
+        """
+        f = self._fall(firma="Meier Garage AG",
+                       zweck="Betrieb einer Garage, Handel mit "
+                             "Motorfahrzeugen",
+                       meldungsart="Konkurseröffnung")
+        k = klassierung.klassieren(f["zweck"], f["rohtext"])
+        self.assertLess(bewertung.bewerten(f, k)["score"],
+                        bewertung.SCHWELLE)
+
     def test_beratung_faellt_durch(self):
         f = self._fall(zweck="Unternehmensberatung und Coaching",
                        gruendung="2019-06-14")
@@ -673,7 +707,8 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         self.assertTrue(cfg["amtsblatt"]["aktiv"])
         self.assertTrue(cfg["amtsblatt"]["auto"])
 
-    def _quelle_mit_hr(self, hr_treffer, zweck, param_der_geht="uid"):
+    def _quelle_mit_hr(self, hr_treffer, zweck, param_der_geht="uid",
+                       gruendung=None):
         """Eine Quelle, deren HR-Suche nur über einen Parameter klappt."""
         from radar.quellen.amtsblatt import AmtsblattQuelle
         q = AmtsblattQuelle({"pause_sekunden": 0})
@@ -684,7 +719,8 @@ class TestAmtsblattAbfrage(unittest.TestCase):
             return hr_treffer if parameter == param_der_geht else []
 
         q._hr_suchen = hr_suchen
-        q._zweck_aus_publikation = lambda pid: zweck
+        q._hr_publikation_lesen = lambda pid: {"zweck": zweck,
+                                               "gruendung": gruendung}
         return q
 
     def test_zweck_wird_aus_dem_handelsregister_geholt(self):
@@ -700,6 +736,24 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         satz = q.holen("2026-09-01")[0]
         self.assertEqual(satz["zweck"], "Betrieb einer Garage und Autohandel")
         self.assertIn("Zweckartikel", " ".join(q.protokoll))
+
+    def test_gruendungsdatum_kommt_aus_derselben_anfrage(self):
+        """Ohne Gründungsdatum fehlen 20 von 55 möglichen Punkten.
+
+        In der Konkurspublikation steht es oft nicht, im
+        Handelsregistereintrag immer — und den holen wir ohnehin schon.
+        """
+        q = self._quelle_mit_hr([{"id": "hr-1"}], "Transporte",
+                                gruendung="2009-03-02")
+        q._liste = lambda seit, bis: [{"id": "x", "datum": "2026-09-18",
+                                       "titel": "Konkurseröffnung",
+                                       "kanton": "ZH", "pdf": None}]
+        q._detail = lambda pid: {"firma": "Wyss & Partner AG",
+                                 "uid": "CHE-116.284.335", "ort": "Kloten",
+                                 "_art": "company", "text": "..."}
+        satz = q.holen("2026-09-01")[0]
+        self.assertEqual(satz["gruendung"], "2009-03-02")
+        self.assertEqual(satz["zweck"], "Transporte")
 
     def test_zwecksuche_merkt_sich_den_parameter(self):
         """Der Parametername wird einmal gesucht, dann gemerkt."""

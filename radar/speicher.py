@@ -256,8 +256,15 @@ class Speicher:
         z = {}
         z["gesamt"] = self.db.execute(
             "SELECT COUNT(*) c FROM faelle").fetchone()["c"]
+        # Die Schwelle steht an genau einer Stelle: bewertung.SCHWELLE.
+        # Sie hier noch einmal hinzuschreiben hiesse, sie beim nächsten
+        # Nachjustieren an zwei Orten ändern zu müssen — und einen davon
+        # zu vergessen.
+        from .bewertung import SCHWELLE
+        z["schwelle"] = SCHWELLE
         z["ueber_schwelle"] = self.db.execute(
-            "SELECT COUNT(*) c FROM faelle WHERE score >= 60").fetchone()["c"]
+            "SELECT COUNT(*) c FROM faelle WHERE score >= ?",
+            (SCHWELLE,)).fetchone()["c"]
         z["nach_kanton"] = {r["kanton"] or "?": r["c"] for r in self.db.execute(
             "SELECT kanton, COUNT(*) c FROM faelle GROUP BY kanton")}
         z["nach_status"] = {r["status"]: r["c"] for r in self.db.execute(

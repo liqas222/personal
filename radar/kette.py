@@ -103,7 +103,8 @@ def meldung_bauen(fall):
     return "\n".join(t)
 
 
-KEINE_TREFFER = "Heute wurden keine neuen Deals mit einem Score ab 60 gefunden."
+KEINE_TREFFER = ("Heute wurden keine neuen Deals mit einem Score ab %d "
+                 "gefunden." % bewertung.SCHWELLE)
 
 
 def tagesmeldung(speicher, kantone=None, min_score=None):

@@ -13,6 +13,7 @@ import re
 import zipfile
 
 from . import bewertung, kette, modell
+from .bewertung import SCHWELLE
 from .quellen.dateien import CsvQuelle, JsonQuelle, PdfQuelle
 from .quellen.amtsblatt import AmtsblattQuelle
 from .quellen.shab import ShabQuelle
@@ -24,7 +25,7 @@ CFG_PFAD = os.path.join(BASE, "config.json")
 
 STANDARD_CFG = {
     "kantone": ["ZH", "AG", "ZG", "SZ", "SG", "LU"],
-    "min_score": 60,
+    "min_score": SCHWELLE,
     # Löschfrist für Fälle. Konkursmeldungen über Einzelfirmen enthalten
     # Personendaten; eine unbegrenzte Historie wäre nach DSG nicht in
     # Ordnung. 0 = keine Löschung (dann bewusst entscheiden).

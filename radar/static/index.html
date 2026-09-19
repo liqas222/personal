@@ -119,7 +119,7 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
   <label>KANTON</label>
   <div id="kantone"></div>
   <label>SCORE AB</label>
-  <input type="number" id="minscore" value="60" min="0" max="100" step="5"
+  <input type="number" id="minscore" value="0" min="0" max="100" step="5"
          style="width:64px">
   <label>BRANCHE</label>
   <select id="branche"><option value="">alle</option></select>
@@ -152,7 +152,7 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
 
 <div id="fuss">
   <div class="f">FÄLLE: <b id="fGesamt">–</b></div>
-  <div class="f">AB SCORE 60: <b id="fSchwelle">–</b></div>
+  <div class="f">AB SCORE <b id="fSchwelleWert">–</b>: <b id="fSchwelle">–</b></div>
   <div class="f">QUELLEN: <b id="fQuellen">–</b></div>
   <div class="f">LETZTER LAUF: <b id="fLauf">–</b></div>
   <div class="f rechts">Vermutete Assets sind abgeleitet, nicht bestätigt ·
@@ -161,6 +161,7 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
 
 <script>
 const $ = (id) => document.getElementById(id);
+let SCHWELLE = 50;   // wird aus /api/zustand nachgezogen
 // Die Kantonsknöpfe waren fest auf sechs verdrahtet. Sobald der Abruf
 // mehr Kantone holt, wäre der Rest nicht filterbar und im Zweifel gar
 // nicht sichtbar. Deshalb kommen sie jetzt aus den Daten: gezeigt wird,
@@ -200,7 +201,8 @@ function bauKantone(vorhanden) {
 }
 
 function scoreKlasse(s) {
-  return s >= 75 ? "s-hoch" : s >= 60 ? "s-mittel" : "s-tief";
+  return s >= SCHWELLE + 20 ? "s-hoch"
+       : s >= SCHWELLE ? "s-mittel" : "s-tief";
 }
 
 async function laden() {
@@ -215,6 +217,10 @@ async function laden() {
   }
   $("fGesamt").textContent = d.zahlen.gesamt;
   $("fSchwelle").textContent = d.zahlen.ueber_schwelle;
+  $("fSchwelleWert").textContent = d.zahlen.schwelle;
+  // Die Farbgrenze muss der echten Schwelle folgen, sonst
+  // steht ein grün markierter Fall unter der Linie.
+  SCHWELLE = d.zahlen.schwelle || SCHWELLE;
 
   if (!FAELLE.length) {
     // „Nichts da" und „nichts über der Schwelle" sind zwei verschiedene
@@ -229,7 +235,7 @@ async function laden() {
         "<br><br>Konkurspublikationen enthalten <b>keinen " +
         "Zweckartikel</b> — der steht im Handelsregister. Ohne ihn " +
         "trägt nur der Firmenname, und die meisten Fälle bleiben " +
-        "deshalb unter 60." +
+        "deshalb unter " + SCHWELLE + "." +
         '<br><br><button id="alleZeigen">Alle Fälle zeigen (Score ab 0)' +
         "</button></div>"
       : '<div class="leer">Noch keine Fälle.' +

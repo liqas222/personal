@@ -131,6 +131,21 @@ Protokoll.
   (`kette.neu_bewerten`); Status und Notiz bleiben. Ein Fall ging dabei
   von 25 auf 55 — das ist der Unterschied zwischen unbrauchbar und
   brauchbar.
+- **Die Schwelle ist 50, nicht 60 — und sie steht an EINER Stelle.**
+  Die 60 stammten aus der Spezifikation, in der 45 Punkte aus der
+  Firmenwebsite kommen sollten; die Anreicherung wurde gestrichen, die
+  Schwelle blieb. Ergebnis: aus amtlichen Daten allein sind höchstens 55
+  erreichbar (30 Branche + 20 Alter + 5 Konkurseröffnung), und 40 echte
+  Fälle ergaben keinen einzigen Treffer. Wer an den Gewichten dreht,
+  rechnet vorher den Musterfall durch — ein Test hält ihn fest.
+- **Das Gründungsdatum kommt aus derselben HR-Anfrage wie der Zweck.**
+  20 von 55 Punkten hängen daran, und in der Konkurspublikation steht es
+  oft nicht. Es getrennt zu holen wäre Verschwendung, es liegen zu lassen
+  die teuerste Art von Sparsamkeit.
+- **Der Score sortiert, er sperrt nicht aus.** Die Oberfläche startet bei
+  Score 0. Ein harter Filter auf der Schwelle hat zweimal eine leere
+  Liste gezeigt, obwohl Fälle da waren — und widersprach dem eigenen
+  Grundsatz, dass der Score eine Sortierhilfe ist.
 - **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
   unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
 

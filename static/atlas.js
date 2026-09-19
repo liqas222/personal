@@ -7,7 +7,7 @@ const WELT_BBOX = [-180, -58, 180, 80];
    Ohne die lässt sich nicht unterscheiden, ob eine Änderung fehlt oder ob
    der Browser noch die alte Datei aus seinem Zwischenspeicher zeigt — und
    genau darüber haben wir schon zweimal aneinander vorbeigeredet. */
-const BAU = "2026-09-19 · 20";
+const BAU = "2026-09-19 · 21";
 
 let cv, ctx, W = 0, H = 0, DPR = 1;
 let LAENDER = [];          // dekodierte Ringe mit vorberechneter Bounding-Box
