@@ -7,6 +7,7 @@ Kein Netz, keine Fremdbibliothek. Was hier grün ist, ist grün — nicht
 "grün, solange eine Schnittstelle antwortet".
 """
 import datetime
+import io
 import json
 import os
 import sys
@@ -408,6 +409,54 @@ class TestLoeschfrist(unittest.TestCase):
         self.sp.status_setzen(f["id"], "Inventarliste angefragt")
         self.sp.aufraeumen(1)
         self.assertIsNotNone(self.sp.holen(f["id"]))
+
+
+class TestAmtsblattAbfrage(unittest.TestCase):
+    """Die Abfrage selbst — Rubrikumfang und Zusatzparameter.
+
+    Beides stammt aus dem ersten echten Lauf auf dem Server: die
+    Rubrikliste reichte bis KK12/SB07, und die Trefferliste antwortete
+    mit 401, solange die Abfrage sich nicht auf veröffentlichte
+    Publikationen beschränkte.
+    """
+
+    def test_rubrikumfang(self):
+        from radar.quellen.amtsblatt import (BETREIBUNG, KONKURS,
+                                             STANDARD_RUBRIKEN)
+        self.assertIn("KK12", KONKURS)
+        self.assertIn("SB07", BETREIBUNG)
+        # Oberrubriken gehören NICHT in subRubrics.
+        self.assertNotIn("KK", STANDARD_RUBRIKEN)
+        self.assertNotIn("SB", STANDARD_RUBRIKEN)
+
+    def test_zusatzparameter_standard(self):
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        self.assertEqual(AmtsblattQuelle({}).zusatz,
+                         {"publicationStates": "PUBLISHED"})
+
+    def test_zusatzparameter_abschaltbar(self):
+        """Leeres dict heisst „ausdrücklich keine", nicht „nimm die Vorgabe"."""
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        self.assertEqual(AmtsblattQuelle({"zusatz_parameter": {}}).zusatz, {})
+
+    def test_401_meldung_nennt_den_ausweg(self):
+        """Ein 401 darf nicht als „nichts gefunden" durchgehen."""
+        import urllib.error
+
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        q = AmtsblattQuelle({})
+
+        def dicht(url, akzeptiere="application/json"):
+            raise urllib.error.HTTPError(url, 401, "Unauthorized", {},
+                                         io.BytesIO(b"nope"))
+
+        q._hole = dicht
+        with self.assertRaises(RuntimeError) as fehler:
+            q.holen()
+        text = str(fehler.exception)
+        self.assertIn("401", text)
+        self.assertIn("radar.pruefen", text)
+        self.assertIn("zusatz_parameter", text)
 
 
 if __name__ == "__main__":

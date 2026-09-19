@@ -80,27 +80,24 @@ def main(argv=None):
         return 1
 
     # --- 2. Liefert die Liste Treffer? ----------------------------------
-    schritt(2, "Trefferliste der letzten 14 Tage")
-    q = AmtsblattQuelle({"basis_url": basis, "max_seiten": 1,
-                         "seitengroesse": 20})
+    schritt(2, "Trefferliste — welche Abfrage lässt der Dienst zu?")
     import time
     seit = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 14 * 86400))
     bis = time.strftime("%Y-%m-%d")
-    try:
-        kopf = q._liste(seit, bis)
-        for z in q.protokoll:
-            print("  " + z)
-        print("Publikationen: %d" % len(kopf))
-        for k in kopf[:3]:
-            print("  · %s | %s | %s" % (k.get("datum"), k.get("rubrik"),
-                                        (k.get("titel") or "")[:60]))
-        if not kopf:
-            print("  KEINE Treffer. Mögliche Gründe: Rubrikcodes stimmen "
-                  "nicht, oder die Parameternamen heissen anders "
-                  "(publicationDate.start / subRubrics / pageRequest.size).")
-            return 1
-    except Exception as e:
-        print("%s: %s" % (type(e).__name__, e))
+
+    treffer = _variante_finden(basis, seit, bis)
+    if treffer is None:
+        return 1
+    basis, zusatz, accept, kopf = treffer
+
+    print("Publikationen: %d" % len(kopf))
+    for k in kopf[:3]:
+        print("  · %s | %s | %s" % (k.get("datum"), k.get("rubrik"),
+                                    (k.get("titel") or "")[:60]))
+    if not kopf:
+        print("  KEINE Treffer, aber auch kein Fehler. Entweder gab es in "
+              "14 Tagen wirklich nichts (unwahrscheinlich), oder die "
+              "Rubrikcodes passen nicht zu den Parameternamen.")
         return 1
 
     # --- 3. Enthält das Detail-XML die gebrauchten Felder? --------------
@@ -150,7 +147,8 @@ def main(argv=None):
     schritt(4, "Vollständiger Adapterlauf (ohne Speichern)")
     try:
         q2 = AmtsblattQuelle({"basis_url": basis, "max_seiten": 1,
-                              "seitengroesse": 20, "max_details": 5})
+                              "seitengroesse": 20, "max_details": 5,
+                              "zusatz_parameter": zusatz})
         saetze = q2.holen(seit)
         print("%d verwertbare Sätze" % len(saetze))
         for s in saetze[:3]:
@@ -159,11 +157,87 @@ def main(argv=None):
                      (s.get("meldungsart") or "")[:40]))
         print("\nErgebnis: die Schnittstelle funktioniert.")
         print("Automatischen Tageslauf einschalten: in radar/config.json")
-        print('  "amtsblatt": { "aktiv": true, "auto": true }')
+        print('  "amtsblatt": { "aktiv": true, "auto": true, '
+              '"basis_url": %s, "zusatz_parameter": %s }'
+              % (json.dumps(basis), json.dumps(zusatz)))
         return 0
     except Exception as e:
         print("%s: %s" % (type(e).__name__, e))
         return 1
+
+
+def _variante_finden(basis, seit, bis):
+    """Die Abfrage suchen, die der Dienst tatsächlich zulässt.
+
+    Die Rubrikliste antwortet ohne Anmeldung, die Trefferliste kann mit 401
+    ablehnen. Ein 401 auf einem offenen Dienst heisst fast nie „Konto
+    fehlt", sondern „so darfst du nicht fragen". Welcher Parameter das ist,
+    lässt sich nicht erraten — also wird es durchprobiert, mit einer
+    einzigen Rubrik und einer winzigen Seite, damit der Dienst dabei kaum
+    belastet wird.
+
+    Gibt (basis, zusatz, accept, kopfdaten) zurück oder None.
+    """
+    hosts = []
+    for h in (basis, "https://www.shab.ch/api/v1",
+              "https://amtsblattportal.ch/api/v1"):
+        if h not in hosts:
+            hosts.append(h)
+
+    zusaetze = [
+        ({"publicationStates": "PUBLISHED"}, "publicationStates=PUBLISHED"),
+        ({}, "ohne Zusatzparameter"),
+        ({"publicationStates": "PUBLISHED",
+          "allowRubricSelection": "true"}, "+ allowRubricSelection=true"),
+        ({"publicationStates": "PUBLISHED", "tenant": "shab"},
+         "+ tenant=shab"),
+    ]
+    accepts = ["application/json", "application/xml"]
+
+    gesehen = set()
+    for host in hosts:
+        for zusatz, wie in zusaetze:
+            for accept in accepts:
+                q = AmtsblattQuelle({
+                    "basis_url": host, "max_seiten": 1, "seitengroesse": 5,
+                    "rubriken": ["KK01"], "zusatz_parameter": zusatz})
+                kurz = "%s | %s | %s" % (host.split("//")[-1].split("/")[0],
+                                         wie, accept.split("/")[-1])
+                try:
+                    kopf = _liste_mit_accept(q, seit, bis, accept)
+                    print("  OK   %-52s %d Treffer" % (kurz, len(kopf)))
+                    if kopf:
+                        print("\nDiese Abfrage geht. In radar/config.json "
+                              "unter \"amtsblatt\" eintragen:")
+                        print("  " + json.dumps(
+                            {"basis_url": host, "zusatz_parameter": zusatz},
+                            ensure_ascii=False))
+                        return host, zusatz, accept, kopf
+                except urllib.error.HTTPError as e:
+                    print("  %-4s %s" % (e.code, kurz))
+                    gesehen.add(e.code)
+                except Exception as e:
+                    print("  FEHL %-52s %s" % (kurz, type(e).__name__))
+
+    print("\nKeine Variante lieferte Treffer.")
+    if gesehen <= {401, 403} and gesehen:
+        print("Durchgehend %s. Das Portal lässt die Trefferliste "
+              "offenbar nicht anonym zu — dann gibt es keinen "
+              "Parameter, der das repariert, sondern es braucht einen "
+              "Zugang vom Betreiber (SECO/SHAB). Bis dahin bleibt der "
+              "Import von Hand: CSV, JSON oder PDF."
+              % "/".join(str(c) for c in sorted(gesehen)))
+    return None
+
+
+def _liste_mit_accept(q, seit, bis, accept):
+    """Einen Listenabruf mit einem bestimmten Accept-Header machen."""
+    echt = q._hole
+    q._hole = lambda url, akzeptiere=accept: echt(url, accept)
+    try:
+        return q._liste(seit, bis)
+    finally:
+        q._hole = echt
 
 
 def _codes_sammeln(d, raus=None):
@@ -173,7 +247,11 @@ def _codes_sammeln(d, raus=None):
     if isinstance(d, dict):
         for schluessel in ("code", "id", "key"):
             v = d.get(schluessel)
-            if isinstance(v, str) and 2 <= len(v) <= 8:
+            # Nur Unterrubriken: "KK01" ja, die Oberrubrik "KK" nein.
+            # `subRubrics` erwartet Unterrubriken, und eine Oberrubrik dort
+            # ist je nach Dienst ein Fehler statt einer Erweiterung.
+            if (isinstance(v, str) and 3 <= len(v) <= 8
+                    and any(c.isdigit() for c in v)):
                 raus.add(v)
         for v in d.values():
             _codes_sammeln(v, raus)

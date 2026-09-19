@@ -74,17 +74,38 @@ BASIS = "https://amtsblattportal.ch/api/v1"
 # Die übrigen KK-Codes decken Einstellung, Schluss und Widerruf ab; sie
 # werden mitgenommen, weil auch eine Einstellung eine Information ist
 # (sie senkt den Score, statt den Fall zu verschweigen).
-KONKURS = ["KK01", "KK02", "KK03", "KK04", "KK05", "KK06", "KK07", "KK08"]
+#
+# Der Umfang stammt aus der Rubrikliste des echten Dienstes (Schritt 1 von
+# `python3 -m radar.pruefen`, 2026-09-19): KK01–KK12 und SB01–SB07. Die
+# Oberrubriken "KK" und "SB" gehören NICHT dazu — `subRubrics` erwartet
+# Unterrubriken, und eine Oberrubrik dort ist je nach Dienst ein Fehler.
+KONKURS = ["KK%02d" % i for i in range(1, 13)]
 
 # Schuldbetreibung — hier stehen die Steigerungen, also der Moment, in dem
 # tatsächlich etwas verwertet wird.
-BETREIBUNG = ["SB01", "SB02", "SB03", "SB04", "SB05"]
+BETREIBUNG = ["SB%02d" % i for i in range(1, 8)]
 
 # Handelsregister: Auflösung und Löschung. Liefert ausserdem den
 # Zweckartikel, der für die Bewertung das wichtigste Feld ist.
 HANDELSREGISTER = ["HR01", "HR02", "HR03"]
 
 STANDARD_RUBRIKEN = KONKURS + BETREIBUNG
+
+# Zusatzparameter der Trefferliste.
+#
+# WARUM DAS HIER STEHT: die Rubrikliste antwortet ohne weiteres mit HTTP
+# 200, die Trefferliste aber mit **401**. Ein 401 auf einem offenen Dienst
+# bedeutet in aller Regel nicht „Konto fehlt", sondern „so darfst du nicht
+# fragen" — bei dieser Portalsoftware wird die Abfrage erst ohne Anmeldung
+# zugelassen, wenn sie sich ausdrücklich auf veröffentlichte Publikationen
+# beschränkt. Genau das tut `publicationStates=PUBLISHED`.
+#
+# Das ist die begründete Vermutung, nicht die verifizierte Wahrheit.
+# `python3 -m radar.pruefen` probiert deshalb mehrere Varianten durch und
+# nennt die, die wirklich 200 liefert; sie lässt sich danach in
+# radar/config.json unter "amtsblatt" → "zusatz_parameter" eintragen, ohne
+# Code zu ändern.
+STANDARD_ZUSATZ = {"publicationStates": "PUBLISHED"}
 
 
 def _text(knoten, *namen):
@@ -127,6 +148,10 @@ class AmtsblattQuelle(Quelle):
         self.basis = c.get("basis_url") or BASIS
         self.rubriken = c.get("rubriken") or STANDARD_RUBRIKEN
         self.kantone = c.get("kantone") or []
+        # Leeres dict in der Konfiguration heisst „ausdrücklich keine" —
+        # deshalb `is None` und nicht `or`.
+        zusatz = c.get("zusatz_parameter")
+        self.zusatz = STANDARD_ZUSATZ if zusatz is None else dict(zusatz)
         self.seiten_groesse = int(c.get("seitengroesse", 100))
         self.max_seiten = int(c.get("max_seiten", 10))
         self.max_details = int(c.get("max_details", 120))
@@ -170,6 +195,8 @@ class AmtsblattQuelle(Quelle):
                 felder.append(("subRubrics", r))
             for k in self.kantone:
                 felder.append(("cantons", k))
+            for name, wert in sorted(self.zusatz.items()):
+                felder.append((name, wert))
             url = self.basis + "/publications?" + urllib.parse.urlencode(felder)
 
             code, roh = self._hole(url)
@@ -277,12 +304,25 @@ class AmtsblattQuelle(Quelle):
         try:
             kopfdaten = self._liste(seit, bis)
         except urllib.error.HTTPError as e:
+            antwort = e.read()[:300].decode("utf-8", "replace")
+            if e.code in (401, 403):
+                raise RuntimeError(
+                    "Das Portal antwortete mit HTTP %s auf die Trefferliste. "
+                    "Die Rubrikliste geht ohne Anmeldung — es fehlt also "
+                    "kein Konto, sondern die Abfrage ist so nicht "
+                    "zugelassen. Am wahrscheinlichsten fehlt oder stört ein "
+                    "Parameter (aktuell gesetzt: %s). "
+                    "`python3 -m radar.pruefen` probiert die Varianten durch "
+                    "und nennt die funktionierende; sie kommt in "
+                    "radar/config.json unter \"amtsblatt\" → "
+                    "\"zusatz_parameter\". Antwort: %s"
+                    % (e.code, json.dumps(self.zusatz, ensure_ascii=False),
+                       antwort))
             raise RuntimeError(
                 "Das Portal antwortete mit HTTP %s. Prüfe Adresse und "
                 "Parameter in radar/config.json — die Vorgaben stammen aus "
                 "öffentlicher Dokumentation und sind nicht verifiziert. "
-                "Antwort: %s" % (e.code, e.read()[:300].decode(
-                    "utf-8", "replace")))
+                "Antwort: %s" % (e.code, antwort))
         except urllib.error.URLError as e:
             raise RuntimeError(
                 "Keine Verbindung zu %s (%s). Läuft der Server mit "

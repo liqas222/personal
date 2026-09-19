@@ -19,12 +19,12 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 47 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 51 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
-| **Live-Abruf Amtsblattportal** | Adapter **fertig und gegen einen nachgebauten Dienst geprüft**, gegen den echten nie gelaufen — siehe unten |
+| **Live-Abruf Amtsblattportal** | Adapter fertig, gegen einen nachgebauten Dienst geprüft. Gegen den echten Dienst: Rubrikliste **antwortet**, Trefferliste gab **HTTP 401** — noch nicht gelöst, siehe unten |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
@@ -58,6 +58,24 @@ gesperrt. Adresse, Parameter und Rubrikcodes stammen aus öffentlicher
 Dokumentation und aus quelloffenen Projekten, die diese Schnittstelle
 benutzen — das ist etwas anderes als ausgedacht, aber kein Ersatz für einen
 echten Lauf.
+
+**Was der erste echte Lauf ergeben hat** (Server, 2026-09-19):
+
+* Die Schnittstelle existiert. `/rubrics` antwortet mit HTTP 200 und 982
+  Rubrikcodes. Die Konkursrubriken gehen weiter als angenommen: **KK01 bis
+  KK12**, Betreibung **SB01 bis SB07**. Der Adapter nimmt jetzt alle.
+* `/publications` antwortete mit **HTTP 401**. Das ist kein fehlendes
+  Konto — die Rubrikliste geht ja ohne — sondern heisst: *so* darf nicht
+  gefragt werden. Welcher Parameter dafür nötig ist, lässt sich nicht
+  erraten, also probiert `radar.pruefen` jetzt eine Reihe von Varianten
+  durch (mit und ohne `publicationStates=PUBLISHED`, JSON und XML, dazu
+  `www.shab.ch` als zweiter Host) und nennt die, die wirklich Treffer
+  liefert — samt der Zeile, die dann in `config.json` gehört.
+* Lehnt **jede** Variante mit 401 ab, sagt die Prüfung das ausdrücklich:
+  dann lässt das Portal anonyme Abfragen nicht zu, kein Parameter
+  repariert das, und es braucht einen Zugang vom Betreiber. Bis dahin
+  bleibt der Import von Hand (CSV, JSON, PDF) — das ist eine mögliche
+  Antwort, und sie wird nicht als „nichts gefunden" verkleidet.
 
 **Deshalb zuerst das hier ausführen:**
 
@@ -263,7 +281,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            47 Tests, kein Netz nötig
+└── tests/            51 Tests, kein Netz nötig
 ```
 
 ### Tests
