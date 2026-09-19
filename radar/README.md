@@ -19,14 +19,14 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 75 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 76 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
 | **Live-Abruf Amtsblattportal** | **läuft**, gegen den echten Dienst geprüft: 60 Fälle beim ersten 7-Tage-Lauf |
 | Zweckartikel aus dem Handelsregister | **läuft**, gegen den echten Dienst geprüft: 38 von 38 gefunden |
-| Zweck für bestehende Fälle nachtragen | **läuft**, Knopf „Zweck nachtragen“ bzw. `--zweck-nachtragen` |
+| HR-Daten für bestehende Fälle nachtragen | **läuft**, Knopf „HR-Daten nachtragen“ bzw. `--zweck-nachtragen` |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
@@ -201,28 +201,33 @@ Abschalten lässt sich die Suche mit `"zweck_nachschlagen": false`.
 
 ### Bestehende Fälle nachrüsten
 
-Die Zwecksuche kam später dazu als die ersten Läufe. Fälle, die schon in
-der Datenbank liegen, bekommen ihren Zweck nicht von selbst — dafür gibt
-es den Knopf **„Zweck nachtragen“** und:
+Die HR-Suche kam später dazu als die ersten Läufe. Fälle, die schon in der
+Datenbank liegen, bekommen ihre Daten nicht von selbst — dafür gibt es den
+Knopf **„HR-Daten nachtragen“** und:
 
 ```bash
 python3 -m radar.lauf --zweck-nachtragen
 ```
 
-Geholt wird nur für Fälle mit UID und ohne Zweck; anschliessend werden
-sie **neu bewertet**, sonst bliebe der alte Score stehen. Status und
-Notiz bleiben unangetastet — daran hängt Arbeit.
+Nachgetragen werden **Zweck und Gründungsdatum**. Das „und" ist der Punkt:
+die erste Fassung suchte nur nach fehlendem Zweck, und nach dem ersten
+echten Lauf hatten alle vierzig Fälle einen — also tat sie nichts, obwohl
+vielen das Gründungsdatum fehlte. Das sind 20 von 55 Punkten, genug um
+einen guten Fall unter der Schwelle zu halten.
 
-Was das ausmacht, an einem Fall mit nichtssagendem Namen:
+Anschliessend wird **neu bewertet**, sonst bliebe der alte Score stehen.
+Status und Notiz bleiben unangetastet — daran hängt Arbeit.
+
+Was das ausmacht:
 
 ```
-vorher:   25  Wyss & Partner AG   Nicht erkennbar
-nachher:  55  Wyss & Partner AG   Logistik und Transport
-          Assets: Lastwagen, Anhänger, Stapler, Regalanlagen, Hubwagen
+vorher:   35  Meier & Co. AG   Gründung —
+nachher:  55  Meier & Co. AG   Gründung 2006-01-11 · 20 Jahre
 ```
 
-Damit muss die Datenbank nicht weggeworfen werden, um an brauchbare
-Scores zu kommen.
+**Fälle ohne gültige UID** lassen sich nicht ergänzen — die HR-Suche geht
+über die UID. Das steht im Bericht („3 ohne gültige UID"), statt sie
+stillschweigend als vollständig zu zählen.
 
 ### Wenn die Liste leer aussieht
 
@@ -493,7 +498,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            75 Tests, kein Netz nötig
+└── tests/            76 Tests, kein Netz nötig
 ```
 
 ### Tests

@@ -133,7 +133,7 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
     <option value="90">letzte 90 Tage</option>
     <option value="365">letztes Jahr</option>
   </select>
-  <button id="zweckKnopf" title="Bestehenden Fällen den Zweckartikel aus dem Handelsregister nachtragen und neu bewerten">Zweck nachtragen</button>
+  <button id="zweckKnopf" title="Bestehenden Fällen Zweck und Gründungsdatum aus dem Handelsregister nachtragen und neu bewerten">HR-Daten nachtragen</button>
   <button id="importKnopf">Datei importieren</button>
   <input type="file" id="datei" hidden accept=".csv,.json,.pdf">
   <button id="csv">CSV</button>
@@ -402,15 +402,18 @@ $("abrufen").onclick = async () => {
 
 $("zweckKnopf").onclick = async () => {
   $("zweckKnopf").disabled = true;
-  $("importMeldung").textContent = "schlage Zweckartikel nach …";
+  $("importMeldung").textContent = "schlage im Handelsregister nach …";
   try {
     const d = await (await fetch("api/zweck", { method: "POST" })).json();
     $("importMeldung").textContent = d.fehler
       ? "Nicht möglich: " + d.fehler
-      : d.geprueft + " Fälle ohne Zweck geprüft · " + d.ergaenzt +
-        " ergänzt und neu bewertet" +
-        (d.geprueft && !d.ergaenzt
-          ? " — keiner gefunden; siehe radar.pruefen Schritt 5" : "");
+      : !d.geprueft
+        ? "Nichts nachzutragen — alle Fälle haben Zweck und Gründungsdatum."
+        : d.geprueft + " Fälle mit Lücke geprüft · " + d.zwecke +
+          " Zweckartikel, " + d.gruendungen + " Gründungsdaten ergänzt" +
+          (d.ergaenzt ? "" :
+            " — nichts gefunden; siehe radar.pruefen Schritt 5") +
+          (d.ohne_uid ? " · " + d.ohne_uid + " ohne gültige UID" : "");
   } catch (e) {
     $("importMeldung").textContent = "Fehler: " + e.message;
   }

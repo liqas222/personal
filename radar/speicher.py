@@ -189,6 +189,20 @@ class Speicher:
                         (zweck, fall_id))
         self.db.commit()
 
+    def gruendung_setzen(self, fall_id, gruendung):
+        """Gründungsdatum und daraus das Alter setzen.
+
+        Das Alter steht als eigene Spalte in der Datenbank, weil danach
+        gefiltert und sortiert wird. Nur das Datum zu setzen hiesse, dass
+        die Liste weiterhin „—" zeigt.
+        """
+        from .modell import datum_normieren, firmenalter
+        d = datum_normieren(gruendung)
+        self.db.execute(
+            "UPDATE faelle SET gruendung = ?, alter_jahre = ? WHERE id = ?",
+            (d, firmenalter(d), fall_id))
+        self.db.commit()
+
     def bewertung_setzen(self, fall_id, neu):
         """Branche, Assets, Score und Begründung eines Falls ersetzen.
 

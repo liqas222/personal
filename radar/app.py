@@ -395,16 +395,25 @@ def abrufen(tage=None):
     return bericht
 
 
-def zweck_nachtragen(grenze=200):
-    """Bestehenden Fällen den Zweckartikel nachtragen und neu bewerten.
+def zweck_nachtragen(grenze=500):
+    """Bestehenden Fällen die Handelsregisterdaten nachtragen.
 
-    Gebraucht wird das, weil die Zwecksuche später dazukam als die ersten
+    Gebraucht wird das, weil die HR-Suche später dazukam als die ersten
     Läufe. Ohne Nachtragen müsste man die Datenbank wegwerfen, um an
     brauchbare Scores zu kommen — und damit auch jeden Status, jede Notiz
     und jede bereits geleistete Arbeit. Das ist es nicht wert.
 
+    NACHGETRAGEN WIRD ZWECK **UND** GRÜNDUNGSDATUM
+    ----------------------------------------------
+    Anfangs sah das hier nur nach fehlendem Zweck. Das ging schief: nach
+    dem ersten Lauf hatten alle 40 Fälle einen Zweck, also wurde kein
+    einziger angefasst — obwohl vielen das Gründungsdatum fehlte. Das
+    sind 20 von 55 möglichen Punkten, genug um einen guten Fall unter der
+    Schwelle zu halten. Ein Fall wird deshalb genommen, wenn ihm
+    **irgendeines von beiden** fehlt.
+
     Bewertet wird anschliessend neu, sonst bliebe der alte Score stehen
-    und der neue Zweck wäre ohne Wirkung.
+    und die Ergänzung wäre wirkungslos.
     """
     sp = speicher()
     q = AmtsblattQuelle(cfg().get("amtsblatt"))
@@ -412,24 +421,46 @@ def zweck_nachtragen(grenze=200):
     if not ok:
         return {"fehler": grund}
 
-    offen = [f for f in sp.suchen(min_score=0, limit=grenze)
-             if f.get("uid") and not (f.get("zweck") or "").strip()]
-    gefunden, versucht = 0, 0
+    def fehlt(f, feld):
+        return not (f.get(feld) or "").strip()
+
+    alle = sp.suchen(min_score=0, limit=grenze)
+    luecke = [f for f in alle if fehlt(f, "zweck") or fehlt(f, "gruendung")]
+    # Ohne UID gibt es nichts zu suchen — die HR-Suche geht über die UID.
+    # Das gehört in den Bericht: sonst sieht es aus, als wären diese Fälle
+    # vollständig, dabei sind sie nur unerreichbar.
+    offen = [f for f in luecke if f.get("uid")]
+    ohne_uid = len(luecke) - len(offen)
+
+    versucht = zwecke = gruendungen = 0
     for fall in offen:
         versucht += 1
         try:
-            zweck = q._zweck_zu_uid(fall["uid"])
+            hr = q._hr_daten(fall["uid"]) or {}
         except Exception:
             continue
-        if not zweck:
-            continue
-        gefunden += 1
-        sp.zweck_setzen(fall["id"], zweck)
-        neu = kette.neu_bewerten(sp.holen(fall["id"]))
-        sp.bewertung_setzen(fall["id"], neu)
-    return {"geprueft": versucht, "ergaenzt": gefunden,
-            "ohne_uid_oder_schon_da": sp.zahlen()["gesamt"] - versucht,
-            "parameter": q.uid_parameter}
+        aenderung = False
+        if hr.get("zweck") and fehlt(fall, "zweck"):
+            sp.zweck_setzen(fall["id"], hr["zweck"])
+            zwecke += 1
+            aenderung = True
+        if hr.get("gruendung") and fehlt(fall, "gruendung"):
+            sp.gruendung_setzen(fall["id"], hr["gruendung"])
+            gruendungen += 1
+            aenderung = True
+        if aenderung:
+            sp.bewertung_setzen(fall["id"],
+                                kette.neu_bewerten(sp.holen(fall["id"])))
+
+    return {
+        "geprueft": versucht,
+        "ergaenzt": zwecke + gruendungen,
+        "zwecke": zwecke,
+        "gruendungen": gruendungen,
+        "vollstaendig": len(alle) - len(luecke),
+        "ohne_uid": ohne_uid,
+        "parameter": q.uid_parameter,
+    }
 
 
 def aufraeumen():

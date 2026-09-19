@@ -146,6 +146,15 @@ Protokoll.
   Score 0. Ein harter Filter auf der Schwelle hat zweimal eine leere
   Liste gezeigt, obwohl Fälle da waren — und widersprach dem eigenen
   Grundsatz, dass der Score eine Sortierhilfe ist.
+- **Nachtragen sucht nach ALLEN Lücken, nicht nur nach der, die den
+  Anlass gab.** Die erste Fassung fragte nur nach fehlendem Zweck — nach
+  dem ersten echten Lauf hatten alle vierzig Fälle einen, also tat sie
+  nichts, obwohl vielen das Gründungsdatum fehlte (20 von 55 Punkten).
+  „0 Fälle geprüft" sah aus wie „alles in Ordnung".
+- **Ein Fall ohne gültige UID ist nicht vollständig, sondern
+  unerreichbar.** Die HR-Suche geht über die UID. Solche Fälle werden im
+  Bericht getrennt ausgewiesen, statt unter „war schon vollständig" zu
+  verschwinden.
 - **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
   unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
 

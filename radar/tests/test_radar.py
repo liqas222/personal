@@ -813,6 +813,41 @@ class TestAmtsblattAbfrage(unittest.TestCase):
             self.assertIn("Lastwagen", nachher["assets"])
             sp.schliessen()
 
+    def test_nachtragen_greift_auch_bei_fehlendem_gruendungsdatum(self):
+        """Die Lage nach dem ersten echten Lauf.
+
+        Alle Fälle hatten einen Zweck, also fand das Nachtragen „0 Fälle
+        ohne Zweck" und tat nichts — obwohl vielen das Gründungsdatum
+        fehlte. Das sind 20 von 55 Punkten und hält einen guten Fall
+        unter der Schwelle. Gesucht wird deshalb nach BEIDEN Lücken.
+        """
+        from radar import kette
+        from radar.speicher import Speicher
+        with tempfile.TemporaryDirectory() as ordner:
+            sp = Speicher(os.path.join(ordner, "radar.db"))
+            kette.verarbeiten([{
+                "firma": "Meier Garage AG", "uid": "CHE-105.933.858",
+                "ort": "Baden", "kanton": "AG",
+                "publikationsdatum": "2026-09-17",
+                "meldungsart": "Konkurseröffnung",
+                "zweck": "Betrieb einer Garage, Handel mit Motorfahrzeugen",
+            }], sp, STICHTAG)
+            fall = sp.suchen(min_score=0)[0]
+            self.assertTrue(fall["zweck"])          # Zweck ist da …
+            self.assertFalse(fall["gruendung"])     # … Gründung nicht
+            vorher = fall["score"]
+            self.assertLess(vorher, bewertung.SCHWELLE)
+
+            sp.gruendung_setzen(fall["id"], "2006-01-11")
+            sp.bewertung_setzen(
+                fall["id"], kette.neu_bewerten(sp.holen(fall["id"]),
+                                               STICHTAG))
+            nachher = sp.holen(fall["id"])
+            self.assertGreaterEqual(nachher["score"], bewertung.SCHWELLE)
+            # Das Alter muss mitgesetzt werden, sonst zeigt die Liste „—".
+            self.assertEqual(nachher["alter_jahre"], 20)
+            sp.schliessen()
+
     def test_nachtragen_laesst_den_status_stehen(self):
         """Neu bewerten darf keine geleistete Arbeit wegwerfen."""
         from radar import kette

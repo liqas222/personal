@@ -33,7 +33,7 @@ def main(argv=None):
     p.add_argument("--shab", action="store_true",
                    help="alter SHAB-Adapter (unverifiziert, abgeschaltet)")
     p.add_argument("--zweck-nachtragen", action="store_true",
-                   help="Bestehenden Fällen den Zweckartikel aus dem "
+                   help="Bestehenden Fällen Zweck und Gründungsdatum aus dem "
                         "Handelsregister nachtragen und neu bewerten")
     p.add_argument("--meldung", action="store_true",
                    help="Tagesmeldung ausgeben")
@@ -75,12 +75,20 @@ def main(argv=None):
         b = app.zweck_nachtragen()
         if b.get("fehler"):
             sys.exit("Nachtragen nicht möglich: " + b["fehler"])
-        print("%d Fälle ohne Zweck geprüft, %d ergänzt und neu bewertet"
-              % (b["geprueft"], b["ergaenzt"]))
+        print("%d Fälle mit Lücke geprüft · %d Zweckartikel, "
+              "%d Gründungsdaten ergänzt · %d waren schon vollständig"
+              % (b["geprueft"], b["zwecke"], b["gruendungen"],
+                 b["vollstaendig"]))
         if b["geprueft"] and not b["ergaenzt"]:
-            print("  Keiner gefunden. Entweder kennt das Portal die "
+            print("  Nichts gefunden. Entweder kennt das Portal die "
                   "UID-Suche anders (siehe radar.pruefen Schritt 5), oder "
                   "zu den Firmen gibt es keine HR-Publikation.")
+        if b.get("ohne_uid"):
+            print("  %d Fälle haben keine gültige UID — zu ihnen lässt sich "
+                  "kein Handelsregistereintrag finden." % b["ohne_uid"])
+        if not b["geprueft"] and not b.get("ohne_uid"):
+            print("  Alle Fälle haben bereits Zweck und Gründungsdatum — "
+                  "es gibt nichts nachzutragen.")
 
     if a.shab:
         q = ShabQuelle(app.cfg().get("shab"))
