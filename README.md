@@ -36,6 +36,17 @@ Die Seite besteht aus statischen Dateien. `serve.py` liefert sie aus und tut
 sonst nichts — er wird nur gebraucht, wenn die Seite unter einer festen
 Adresse und hinter einem Passwort stehen soll.
 
+## Konkurs Deal Radar
+
+Im selben Repo liegt ein zweites Projekt: der **Konkurs Deal Radar**
+(`radar/`), erreichbar über den Knopf oben rechts im Atlas oder unter
+`/radar/`. Er bewertet Schweizer Konkursmeldungen danach, wo sich das
+Nachfragen beim Konkursamt eher lohnt. Eigene Anleitung in
+`radar/README.md`.
+
+Beide laufen im selben Serverprozess. Der Atlas bleibt davon unberührt:
+fehlt der Radar oder bricht er beim Laden, läuft der Atlas weiter.
+
 ## Starten
 
 Kein Build, keine Installation, keine Abhängigkeiten:

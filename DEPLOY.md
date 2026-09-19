@@ -60,6 +60,26 @@ tailscale funnel status          # nur lesen: SwissIntel muss weiter "Funnel on"
 Dann die URL im Browser öffnen. Benutzername ist egal, Passwort ist der
 `auth_token`. Falls noch die alte Seite erscheint: Strg+Shift+R.
 
+## Konkurs Deal Radar
+
+Läuft im selben Dienst mit, unter `/radar/`. Kein zweiter Port, kein
+zweiter Dienst, kein Eingriff in Tailscale. Nach dem Update ist er da.
+
+Der SHAB-Adapter ist abgeschaltet und nicht verifiziert — er muss auf dem
+Server eingerichtet werden, bevor irgendetwas abgerufen wird. Siehe
+`radar/README.md`. Für den PDF-Import:
+
+```bash
+sudo pip3 install pypdf     # optional, nur für PDF
+```
+
+Die Datenbank liegt unter `/opt/atlas/radar/daten/radar.db` und ist von git
+ausgenommen. Sichern, wenn Fälle bearbeitet wurden:
+
+```bash
+cp /opt/atlas/radar/daten/radar.db ~/radar-backup-$(date +%F).db
+```
+
 ## Der Server ruft nichts mehr ab
 
 Seit dem Umbau zum Quiz liefert `serve.py` nur noch Dateien aus: kein

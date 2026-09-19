@@ -6,3 +6,5 @@ node_modules/
 data/live.json
 data/feed.json
 data/verlauf.json
+radar/daten/
+radar/.env

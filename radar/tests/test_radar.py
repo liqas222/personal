@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+"""Tests für den Konkurs Deal Radar.
+
+Läuft mit pytest oder direkt:  python3 radar/tests/test_radar.py
+
+Kein Netz, keine Fremdbibliothek. Was hier grün ist, ist grün — nicht
+"grün, solange eine Schnittstelle antwortet".
+"""
+import datetime
+import os
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+
+from radar import bewertung, kette, klassierung, modell   # noqa: E402
+from radar.quellen.dateien import CsvQuelle, JsonQuelle, PdfQuelle  # noqa: E402
+from radar.quellen.shab import ShabQuelle                 # noqa: E402
+from radar.speicher import Speicher                       # noqa: E402
+
+BEISPIEL = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "beispiel", "konkurse.csv")
+STICHTAG = datetime.date(2026, 9, 10)
+
+
+class TestUid(unittest.TestCase):
+
+    def test_echte_uid_ist_gueltig(self):
+        # Der bekannte Testfall aus dem Auftrag.
+        self.assertTrue(modell.uid_gueltig("CHE-113.766.916"))
+
+    def test_verdrehte_pruefziffer_faellt_auf(self):
+        self.assertFalse(modell.uid_gueltig("CHE-113.766.917"))
+
+    def test_schreibweisen(self):
+        for roh in ("CHE113766916", "CHE-113.766.916", "che 113 766 916"):
+            self.assertEqual(modell.uid_normieren(roh), "CHE-113.766.916")
+
+    def test_unsinn_gibt_none(self):
+        self.assertIsNone(modell.uid_normieren("keine UID"))
+        self.assertIsNone(modell.uid_normieren("CHE-12"))
+
+
+class TestNormalisierung(unittest.TestCase):
+
+    def test_datumsformate(self):
+        self.assertEqual(modell.datum_normieren("02.09.2026"), "2026-09-02")
+        self.assertEqual(modell.datum_normieren("2026-09-02"), "2026-09-02")
+        self.assertEqual(modell.datum_normieren("2.9.2026"), "2026-09-02")
+        self.assertIsNone(modell.datum_normieren("vor drei Tagen"))
+
+    def test_kanton_aus_ort(self):
+        self.assertEqual(modell.kanton_erkennen("Andwil (SG)"), "SG")
+        self.assertEqual(modell.kanton_erkennen("Kloten", "Zürich"), "ZH")
+        self.assertEqual(modell.ort_saeubern("Andwil (SG)"), "Andwil")
+
+    def test_firmenschluessel_ignoriert_rechtsform_und_umlaute(self):
+        a = modell.firmenname_schluessel("Müller Bau AG")
+        b = modell.firmenname_schluessel("Mueller Bau GmbH")
+        self.assertEqual(a, b)
+
+    def test_fall_id_ist_ueber_prozesse_stabil(self):
+        # hashlib statt hash(): sonst waere derselbe Fall nach einem
+        # Neustart ein neuer. Der Wert ist fest verdrahtet, damit ein
+        # Wechsel auffaellt.
+        i = modell.fall_id("CHE-113.766.916", "X AG", "kollokationsplan",
+                           "2026-09-02")
+        self.assertEqual(i, modell.fall_id("CHE-113.766.916", "X AG",
+                                           "kollokationsplan", "2026-09-02"))
+        self.assertEqual(len(i), 20)
+
+    def test_meldungsart_erkennen(self):
+        self.assertEqual(modell.art_erkennen("Kollokationsplan und Inventar"),
+                         "kollokationsplan")
+        self.assertEqual(modell.art_erkennen("Über die Firma wurde der "
+                                             "Konkurs eröffnet"),
+                         "konkurseroeffnung")
+        self.assertEqual(modell.art_erkennen("Einstellung mangels Aktiven"),
+                         "konkurs_einstellung")
+        self.assertEqual(modell.art_erkennen("Öffentliche Steigerung"),
+                         "steigerung")
+
+
+class TestKlassierung(unittest.TestCase):
+
+    def test_montagebau_erkennt_maschinenbau_und_assets(self):
+        k = klassierung.klassieren(
+            "Stahl- und Montagebau, Ausführung von Schweiss- und "
+            "Montagearbeiten")
+        self.assertEqual(k["branche_id"], "maschinenbau")
+        alle = k["assets_genannt"] + k["assets_vermutet"]
+        self.assertTrue(any("Schweiss" in a for a in alle))
+
+    def test_beratung_gibt_abzug(self):
+        k = klassierung.klassieren("Unternehmensberatung und Coaching")
+        self.assertTrue(any(a["id"] == "beratung" for a in k["abzuege"]))
+
+    def test_holding_gibt_abzug(self):
+        k = klassierung.klassieren("Erwerb und Verwaltung von Beteiligungen")
+        self.assertTrue(any(a["id"] == "holding" for a in k["abzuege"]))
+
+    def test_wortgrenzen(self):
+        # "bau" darf nicht in "Baumwolle" treffen.
+        k = klassierung.klassieren("Handel mit Baumwolle")
+        self.assertNotEqual(k["branche_id"], "bau")
+
+    def test_genannte_gegenstaende_schlagen_durch(self):
+        k = klassierung.klassieren("Transporte", "Verwertung von Staplern "
+                                                 "und Regalanlagen")
+        self.assertIn("Stapler und Lagertechnik", k["assets_genannt"])
+
+
+class TestBewertung(unittest.TestCase):
+
+    def _fall(self, **kw):
+        roh = {"firma": "Test AG", "zweck": "", "publikationsdatum":
+               "2026-09-02"}
+        roh.update(kw)
+        return modell.fall_bauen(roh, STICHTAG)
+
+    def test_testfall_erreicht_schwelle(self):
+        """Burger & Simon: der bekannte Fall muss oben landen."""
+        f = self._fall(firma="Burger & Simon Montagebau GmbH",
+                       uid="CHE-113.766.916", ort="Andwil", kanton="SG",
+                       zweck="Stahl- und Montagebau, Ausführung von "
+                             "Schweiss- und Montagearbeiten",
+                       gruendung="2007-04-16",
+                       meldungsart="Kollokationsplan und Inventar")
+        k = klassierung.klassieren(f["zweck"], f["rohtext"])
+        b = bewertung.bewerten(f, k)
+        self.assertGreaterEqual(b["score"], bewertung.SCHWELLE)
+        # Und zwar OHNE Anreicherung — das war der Kern der Kritik an der
+        # urspruenglichen Gewichtung.
+        self.assertFalse(b["hat_anreicherung"])
+        self.assertGreaterEqual(b["nur_amtlich"], bewertung.SCHWELLE)
+
+    def test_beratung_faellt_durch(self):
+        f = self._fall(zweck="Unternehmensberatung und Coaching",
+                       gruendung="2019-06-14")
+        k = klassierung.klassieren(f["zweck"])
+        b = bewertung.bewerten(f, k)
+        self.assertLess(b["score"], bewertung.SCHWELLE)
+
+    def test_widerruf_druckt_score(self):
+        f = self._fall(zweck="Betrieb einer Garage",
+                       gruendung="2004-01-01",
+                       meldungsart="Widerruf des Konkurses")
+        k = klassierung.klassieren(f["zweck"])
+        b = bewertung.bewerten(f, k)
+        self.assertLess(b["score"], bewertung.SCHWELLE)
+
+    def test_score_bleibt_in_den_grenzen(self):
+        f = self._fall(zweck="Garage, Transport, Maschinenbau, Produktion",
+                       gruendung="1980-01-01", meldungsart="Steigerung")
+        k = klassierung.klassieren(f["zweck"])
+        b = bewertung.bewerten(f, k, {"website_assets": True, "standort": True,
+                                      "flotte": True, "mitarbeitende": 40})
+        self.assertLessEqual(b["score"], 100)
+        self.assertGreaterEqual(b["score"], 0)
+
+    def test_jede_zeile_hat_eine_begruendung(self):
+        f = self._fall(zweck="Betrieb einer Garage", gruendung="2004-01-01")
+        k = klassierung.klassieren(f["zweck"])
+        b = bewertung.bewerten(f, k)
+        for z in b["zeilen"]:
+            self.assertTrue(z["grund"])
+            self.assertTrue(z["quelle"])
+
+    def test_kollokationsplan_warnt_vor_der_frist(self):
+        f = self._fall(meldungsart="Kollokationsplan und Inventar")
+        e = bewertung.einschraenkungen(f, klassierung.klassieren(""))
+        self.assertTrue(any("Anfechtungsfrist" in x for x in e))
+        self.assertTrue(any("Leasing" in x for x in e))
+
+    def test_naechster_schritt_nennt_nur_das_konkursamt(self):
+        f = self._fall(konkursamt="Konkursamt Zug")
+        s = bewertung.naechster_schritt(f)
+        self.assertIn("Konkursamt", s)
+        for verboten in ("Inhaber", "Geschäftsführer", "Eigentümer",
+                         "Verwaltungsrat"):
+            self.assertNotIn(verboten, s)
+
+
+class TestImport(unittest.TestCase):
+
+    def test_csv_beispiel(self):
+        with open(BEISPIEL, "rb") as f:
+            q = CsvQuelle(f.read(), "konkurse.csv")
+        roh = q.holen()
+        self.assertEqual(len(roh), 9)
+        self.assertEqual(roh[0]["firma"], "Burger & Simon Montagebau GmbH")
+
+    def test_csv_mit_komma_und_bom(self):
+        inhalt = "﻿Firmenname,Sitz,Datum\nAlpha AG,Zug,01.09.2026\n"
+        roh = CsvQuelle(inhalt.encode("utf-8"), "a.csv").holen()
+        self.assertEqual(roh[0]["firma"], "Alpha AG")
+        self.assertEqual(roh[0]["ort"], "Zug")
+
+    def test_json_verschachtelt(self):
+        inhalt = ('{"content":[{"meta":{"id":"X-1"},'
+                  '"company":{"name":"Beta GmbH","uid":"CHE-113.766.916"},'
+                  '"sitz":"Kloten"}]}')
+        roh = JsonQuelle(inhalt.encode("utf-8")).holen()
+        self.assertEqual(roh[0]["firma"], "Beta GmbH")
+        self.assertEqual(roh[0]["uid"], "CHE-113.766.916")
+
+    def test_pdf_textauswertung_ohne_pypdf(self):
+        text = ("Konkursamt des Kantons St. Gallen\n\n"
+                "Burger & Simon Montagebau GmbH\n"
+                "CHE-113.766.916, Sitz in Andwil (SG)\n"
+                "Kollokationsplan und Inventar, aufgelegt am 02.09.2026\n")
+        roh = PdfQuelle(b"").aus_text(text)
+        self.assertEqual(len(roh), 1)
+        self.assertEqual(roh[0]["uid"], "CHE-113.766.916")
+        self.assertEqual(roh[0]["kanton"], "SG")
+
+
+class TestShabAdapter(unittest.TestCase):
+
+    def test_meldet_sich_als_nicht_verifiziert(self):
+        q = ShabQuelle({"aktiv": True, "basis_url": "https://example.invalid",
+                        "verifiziert": False})
+        ok, grund = q.verfuegbar()
+        self.assertFalse(ok)
+        self.assertIn("Nicht verifiziert", grund)
+
+    def test_abgeschaltet_ist_der_normalfall(self):
+        ok, grund = ShabQuelle({}).verfuegbar()
+        self.assertFalse(ok)
+        self.assertIn("abgeschaltet", grund)
+
+    def test_holen_wirft_statt_leere_liste_zu_liefern(self):
+        # Wichtig: ein nicht eingerichteter Adapter darf NICHT so tun, als
+        # habe er nachgesehen und nichts gefunden.
+        with self.assertRaises(RuntimeError):
+            ShabQuelle({}).holen()
+
+    def test_antwort_lesen_ohne_netz(self):
+        roh = ('{"content":[{"name":"Gamma AG","sitz":"Zug",'
+               '"publicationDate":"2026-09-08"}]}')
+        q = ShabQuelle({})
+        saetze = q.antwort_lesen(roh)
+        self.assertEqual(saetze[0]["firma"], "Gamma AG")
+
+
+class TestSpeicher(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.sp = Speicher(os.path.join(self.tmp, "t.db"))
+
+    def tearDown(self):
+        self.sp.schliessen()
+
+    def _import(self):
+        with open(BEISPIEL, "rb") as f:
+            roh = CsvQuelle(f.read(), "konkurse.csv").holen()
+        return kette.verarbeiten(roh, self.sp, STICHTAG)
+
+    def test_erster_lauf_ist_alles_neu(self):
+        b = self._import()
+        self.assertEqual(b["gelesen"], 9)
+        self.assertEqual(b["neu"], 9)
+
+    def test_zweiter_lauf_meldet_nichts_neues(self):
+        self._import()
+        b = self._import()
+        self.assertEqual(b["neu"], 0)
+        self.assertEqual(b["bekannt"], 9)
+
+    def test_nur_richtige_faelle_ueber_der_schwelle(self):
+        self._import()
+        oben = self.sp.suchen(min_score=bewertung.SCHWELLE)
+        namen = [f["firma"] for f in oben]
+        self.assertIn("Burger & Simon Montagebau GmbH", namen)
+        self.assertIn("Seetal Garage GmbH", namen)
+        # Beratung, Holding und Software gehoeren NICHT dazu.
+        self.assertNotIn("Novaline Consulting AG", namen)
+        self.assertNotIn("Weber Holding AG", namen)
+        self.assertNotIn("Bitstream Digital GmbH", namen)
+
+    def test_status_wird_nicht_ueberschrieben(self):
+        self._import()
+        f = self.sp.suchen(min_score=60)[0]
+        self.sp.status_setzen(f["id"], "Verworfen")
+        self._import()
+        self.assertEqual(self.sp.holen(f["id"])["status"], "Verworfen")
+
+    def test_tagesmeldung_leer_sagt_das_auch(self):
+        text, ids = kette.tagesmeldung(self.sp, ["ZH"], 60)
+        self.assertEqual(text, kette.KEINE_TREFFER)
+        self.assertEqual(ids, [])
+
+    def test_gemeldete_faelle_kommen_nicht_zweimal(self):
+        self._import()
+        text, ids = kette.tagesmeldung(self.sp, None, 60)
+        self.assertTrue(ids)
+        self.sp.als_gemeldet_markieren(ids)
+        text2, ids2 = kette.tagesmeldung(self.sp, None, 60)
+        self.assertEqual(text2, kette.KEINE_TREFFER)
+
+    def test_meldung_nennt_niemals_den_inhaber(self):
+        self._import()
+        for f in self.sp.suchen(min_score=0):
+            t = kette.meldung_bauen(f)
+            self.assertIn("Konkursamt", t)
+            self.assertIn("vermutet", t.lower())
+
+    def test_laufprotokoll(self):
+        lauf = self.sp.lauf_beginnen("Test")
+        self.sp.lauf_beenden(lauf, 5, 3, 1, 1)
+        self.assertEqual(self.sp.letzter_lauf()["gelesen"], 5)
+
+    def test_export_csv_und_xlsx(self):
+        from radar import app
+        self._import()
+        faelle = self.sp.suchen(min_score=0)
+        csv_bytes = app.export_csv(faelle)
+        self.assertIn(b"Deal Score", csv_bytes)
+        xlsx = app.export_xlsx(faelle)
+        self.assertTrue(xlsx.startswith(b"PK"))     # ist ein ZIP
+        import zipfile as _z, io as _io
+        with _z.ZipFile(_io.BytesIO(xlsx)) as z:
+            self.assertIn("xl/worksheets/sheet1.xml", z.namelist())
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

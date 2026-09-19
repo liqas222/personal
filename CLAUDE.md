@@ -10,6 +10,31 @@ einmal an Feed, Telegram, PortWatch und Lagebild dranhing, ist entfernt — wer
 es zurückholen will, findet es in der Git-Historie, aber nicht in diesem
 Stand.
 
+## Zwei Projekte in einem Repo
+
+- **Atlas** (`static/`, `serve.py`) — Länder- und Meerengenquiz, statisch,
+  keine Abrufe nach draussen.
+- **Konkurs Deal Radar** (`radar/`) — Schweizer Konkursmeldungen bewerten.
+  Hängt unter `/radar/` im selben Serverprozess. Eigene README dort.
+
+Warum ein Prozess und nicht zwei Dienste: der Zielserver hat 1 GB RAM, ist
+geteilt, und der Funnel zeigt auf genau einen Port. Ein zweiter Dienst
+hiesse ein zweiter Port, eine Proxy-Regel und ein zweiter Neustart.
+
+**Der Radar darf den Atlas nie mitreissen.** `serve.py` lädt ihn in einem
+try/except; fehlt oder bricht er, läuft der Atlas weiter und sagt es im
+Protokoll.
+
+**Regeln, die im Radar gelten** (ausführlich in `radar/README.md`):
+- Kontaktempfehlung ausschliesslich ans Konkursamt. Ein Feld für
+  Inhaberkontakte existiert nicht — was es nicht gibt, kann man nicht aus
+  Versehen benutzen. Ein Test prüft das.
+- Vermutete Assets sind als vermutet zu kennzeichnen, immer.
+- Ein nicht eingerichteter Quellen-Adapter wirft, statt eine leere Liste zu
+  liefern. Sonst sieht ein leerer Lauf aus wie „nichts gefunden".
+- Der Score ist eine Sortierhilfe, keine Wertangabe, und jede Zeile nennt
+  Punkte, Grund und Herkunft.
+
 ## Nach jeder Änderung: den Befehl dazuschreiben
 
 Wenn etwas fertig und gepusht ist, gehört **immer** der Befehl in die Antwort,
