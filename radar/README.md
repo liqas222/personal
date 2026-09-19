@@ -19,12 +19,13 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 66 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 70 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
-| **Live-Abruf Amtsblattportal** | **läuft**, gegen den echten Dienst geprüft: Trefferliste, Detailabruf und Feldzuordnung liefern echte Fälle. Einschränkung beim Zweckartikel — siehe unten |
+| **Live-Abruf Amtsblattportal** | **läuft**, gegen den echten Dienst geprüft: 60 Fälle beim ersten 7-Tage-Lauf |
+| Zweckartikel aus dem Handelsregister | **gebaut**, gegen einen Nachbau geprüft — beim echten Dienst mit `radar.pruefen` Schritt 5 bestätigen |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
@@ -159,16 +160,44 @@ doppelt Geholtes erkennt die Duplikatprüfung ohnehin.
 Jeder Abruf sagt danach, ab wann er gesucht hat: „ab 2026-08-20: 12
 gelesen · 12 neu".
 
-### Was fehlt: der Zweckartikel
+### Der Zweckartikel — das Problem und die Lösung
 
-Die Konkurspublikationen enthalten **keinen Zweckartikel**. Der steht im
-Handelsregister, nicht in der Konkursmeldung. Für die Bewertung ist das
-die wichtigste Angabe — ohne sie tragen nur der Firmenname („… Transport
-AG", „Garage …") und der Meldungstext, und viele Fälle bleiben deshalb
-unter der Schwelle.
+Eine Konkurspublikation nennt **keinen Zweckartikel**. Für die Bewertung
+ist er aber die wichtigste Angabe: aus ihm kommen Branche und vermutete
+Assets. Der erste echte Lauf zeigte, was das heisst:
 
-Das ist eine echte Lücke und keine Kleinigkeit. Sie wird hier
-hingeschrieben statt mit geratenen Punkten überdeckt.
+```
+60 Fälle erfasst · AB SCORE 60: 0
+```
+
+Sechzig Firmen gefunden, keine einzige über der Schwelle — weil nur der
+Firmenname zu bewerten war.
+
+**Die Lösung liegt in derselben Schnittstelle.** Der Zweck steht im
+Handelsregister, und dessen Publikationen sind die Rubriken **HR01–HR03**
+desselben Portals. Keine zweite Quelle, kein Zugang, kein Konto — zwei
+zusätzliche Anfragen je Firma:
+
+1. HR-Publikationen zur UID suchen,
+2. aus der neuesten den `purpose` lesen.
+
+Welcher Parameter die Suche nach einer UID entgegennimmt, ist nicht
+dokumentiert. Der Adapter probiert deshalb einmal eine Reihe durch (`uid`,
+`companyUid`, `query`, …), merkt sich den, der funktioniert, und fragt ab
+dann nur noch damit. `python3 -m radar.pruefen` zeigt in **Schritt 5**,
+welcher es beim echten Dienst ist.
+
+Findet keine Variante etwas, bleibt der Zweck leer und der Lauf geht
+trotzdem durch — dann hilft nur Score ab 0 und eigenes Sichten.
+Abschalten lässt sich die Suche mit `"zweck_nachschlagen": false`.
+
+### Wenn die Liste leer aussieht
+
+„Keine Fälle" und „nichts über der Schwelle" sind zwei verschiedene
+Lagen. Sind Fälle erfasst, sagt die Oberfläche das jetzt auch — mit der
+Zahl, dem Grund und einem Knopf „Alle Fälle zeigen (Score ab 0)". Vorher
+stand dort „Importiere eine CSV-Datei", obwohl sechzig Fälle in der
+Datenbank lagen.
 
 **Deshalb zuerst das hier ausführen:**
 
@@ -390,7 +419,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            66 Tests, kein Netz nötig
+└── tests/            70 Tests, kein Netz nötig
 ```
 
 ### Tests

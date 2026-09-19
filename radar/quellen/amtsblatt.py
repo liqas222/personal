@@ -183,7 +183,14 @@ class AmtsblattQuelle(Quelle):
         self.pause = float(c.get("pause_sekunden", 0.4))
         self.zeitlimit = int(c.get("zeitlimit", 30))
         self.aktiv = c.get("aktiv", True)
+        # Zweckartikel aus Handelsregister-Publikationen nachschlagen.
+        # Kostet je Firma zwei weitere Anfragen, ist aber der Unterschied
+        # zwischen einer brauchbaren und einer nutzlosen Bewertung.
+        self.zweck_nachschlagen = c.get("zweck_nachschlagen", True)
+        self.max_zweck = int(c.get("max_zweck", 60))
+        self.uid_parameter = c.get("uid_parameter")   # None = ausprobieren
         self.protokoll = []
+        self._zweck_zwischenspeicher = {}
 
     def verfuegbar(self):
         if not self.aktiv:
@@ -391,6 +398,73 @@ class AmtsblattQuelle(Quelle):
         return bool(d.get("_geburtsdatum") or d.get("_vorname")) \
             and not d.get("uid")
 
+    # -- Zweckartikel nachschlagen ----------------------------------------
+    #
+    # WARUM DAS SEIN MUSS
+    # -------------------
+    # Eine Konkurspublikation nennt keinen Zweckartikel. Für die Bewertung
+    # ist er aber die wichtigste Angabe: aus ihm kommen Branche und
+    # vermutete Assets. Ohne ihn trägt nur der Firmenname, und der erste
+    # echte Lauf zeigte, was das heisst — 60 erfasste Fälle, kein
+    # einziger über der Schwelle.
+    #
+    # Der Zweck steht im Handelsregister, und dessen Publikationen liegen
+    # in DERSELBEN offenen Schnittstelle (Rubriken HR01–HR03). Es braucht
+    # also keine zweite Quelle, keinen Zugang und kein Konto — nur zwei
+    # zusätzliche Anfragen je Firma.
+
+    UID_PARAMETER = ("uid", "companyUid", "identificationNumber", "query",
+                     "keyword", "searchTerm", "fullText")
+
+    def _zweck_zu_uid(self, uid):
+        """Den Zweckartikel zu einer UID suchen. None, wenn nichts da ist.
+
+        Welcher Parameter die Suche nach einer UID entgegennimmt, ist
+        nicht dokumentiert. Statt zu raten wird er einmal ausprobiert und
+        dann gemerkt — das kostet beim ersten Fall ein paar Anfragen und
+        danach keine mehr.
+        """
+        if uid in self._zweck_zwischenspeicher:
+            return self._zweck_zwischenspeicher[uid]
+
+        namen = ([self.uid_parameter] if self.uid_parameter
+                 else list(self.UID_PARAMETER))
+        zweck = None
+        for name in namen:
+            try:
+                treffer = self._hr_suchen(name, uid)
+            except Exception:
+                continue
+            if not treffer:
+                continue
+            # Dieser Parametername funktioniert — ab jetzt nur noch der.
+            if not self.uid_parameter:
+                self.uid_parameter = name
+                self.protokoll.append(
+                    "Zwecksuche läuft über den Parameter %s" % name)
+            zweck = self._zweck_aus_publikation(treffer[0]["id"])
+            break
+
+        self._zweck_zwischenspeicher[uid] = zweck
+        return zweck
+
+    def _hr_suchen(self, parameter, uid):
+        felder = [(parameter, uid), ("pageRequest.size", "5")]
+        for r in HANDELSREGISTER:
+            felder.append(("subRubrics", r))
+        for n, w in sorted(self.zusatz.items()):
+            felder.append((n, w))
+        url = self.basis + "/publications?" + urllib.parse.urlencode(felder)
+        code, roh = self._hole(url)
+        return self._liste_lesen(roh)
+
+    def _zweck_aus_publikation(self, pub_id):
+        url = "%s/publications/%s/xml" % (self.basis, pub_id)
+        code, roh = self._hole(url, "application/xml")
+        wurzel = ET.fromstring(roh.decode("utf-8", "replace"))
+        return _text(wurzel, "purpose", "zweck", "businessPurpose",
+                     "companyPurpose")
+
     # -- Hauptlauf --------------------------------------------------------
 
     def holen(self, seit=None):
@@ -469,6 +543,27 @@ class AmtsblattQuelle(Quelle):
             if satz.get("firma"):
                 raus.append(satz)
             time.sleep(self.pause)
+
+        # Zweckartikel nachschlagen — erst jetzt, damit dafür nur Firmen
+        # angefragt werden, die es überhaupt in die Liste geschafft haben.
+        if self.zweck_nachschlagen:
+            zwecke = 0
+            for satz in raus[:self.max_zweck]:
+                if satz.get("zweck") or not satz.get("uid"):
+                    continue
+                try:
+                    z = self._zweck_zu_uid(satz["uid"])
+                except Exception as e:
+                    self.protokoll.append("Zwecksuche %s: %s"
+                                          % (satz["uid"], e))
+                    continue
+                if z:
+                    satz["zweck"] = z
+                    zwecke += 1
+                time.sleep(self.pause)
+            self.protokoll.append(
+                "%d Zweckartikel aus dem Handelsregister nachgeschlagen"
+                % zwecke)
 
         self.protokoll.append(
             "%d verwertbare Sätze, %d natürliche Personen übersprungen, "

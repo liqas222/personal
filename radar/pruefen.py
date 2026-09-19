@@ -162,13 +162,51 @@ def main(argv=None):
             print("  · %s | %s | UID %s | %s"
                   % (s.get("firma"), s.get("ort"), s.get("uid"),
                      (s.get("meldungsart") or "")[:40]))
+        # --- 5. Zweckartikel aus dem Handelsregister --------------------
+        schritt(5, "Zweckartikel nachschlagen — geht die Suche nach UID?")
+        mit_uid = [s for s in saetze if s.get("uid")]
+        if not mit_uid:
+            print("  Kein Satz mit UID dabei — nicht prüfbar. Bei "
+                  "Privatpersonen ist das normal.")
+        else:
+            q3 = AmtsblattQuelle({"basis_url": basis,
+                                  "zusatz_parameter": zusatz,
+                                  "pause_sekunden": 0.4})
+            uid = mit_uid[0]["uid"]
+            print("  Suche zu %s (%s)" % (uid, mit_uid[0].get("firma")))
+            for name in AmtsblattQuelle.UID_PARAMETER:
+                try:
+                    treffer = q3._hr_suchen(name, uid)
+                except urllib.error.HTTPError as e:
+                    print("    %-22s HTTP %s" % (name, e.code))
+                    continue
+                except Exception as e:
+                    print("    %-22s %s" % (name, type(e).__name__))
+                    continue
+                print("    %-22s %d Treffer" % (name, len(treffer)))
+                if treffer:
+                    z = q3._zweck_aus_publikation(treffer[0]["id"])
+                    print("\n  Zweck: %s" % ((z or "")[:200] or
+                                             "gefunden, aber ohne Zweckfeld"))
+                    if z:
+                        print("\n  Das ist die wichtigste Angabe für die "
+                              "Bewertung. Läuft.")
+                    break
+                time.sleep(0.4)
+            else:
+                print("\n  Keine Variante fand eine HR-Publikation. Dann "
+                      "bleibt der Zweck leer und die meisten Fälle unter "
+                      "der Schwelle — Score ab 0 filtern und von Hand "
+                      "sichten. Abschalten lässt sich die Suche mit "
+                      "\"zweck_nachschlagen\": false.")
+
         print("\nErgebnis: die Schnittstelle funktioniert.")
         # Ein Befehl zum Kopieren, kein JSON-Schnipsel: ein Schnipsel in
         # der Shell ergibt „amtsblatt:: command not found", und die
         # Einstellung ist dann nicht gesetzt, sieht aber so aus.
         print("Einschalten:")
         print("  python3 -m radar.einrichten --an "
-              "--kantone ZH,AG,ZG,SZ,SG,LU")
+              "--kantone deutsch")
         print("  sudo systemctl restart atlas")
         if basis != BASIS:
             print("Abweichende Adresse — zusätzlich in radar/config.json "

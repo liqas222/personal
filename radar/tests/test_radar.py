@@ -673,6 +673,63 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         self.assertTrue(cfg["amtsblatt"]["aktiv"])
         self.assertTrue(cfg["amtsblatt"]["auto"])
 
+    def _quelle_mit_hr(self, hr_treffer, zweck, param_der_geht="uid"):
+        """Eine Quelle, deren HR-Suche nur über einen Parameter klappt."""
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        q = AmtsblattQuelle({"pause_sekunden": 0})
+        q.versuche = []
+
+        def hr_suchen(parameter, uid):
+            q.versuche.append(parameter)
+            return hr_treffer if parameter == param_der_geht else []
+
+        q._hr_suchen = hr_suchen
+        q._zweck_aus_publikation = lambda pid: zweck
+        return q
+
+    def test_zweck_wird_aus_dem_handelsregister_geholt(self):
+        """Konkursmeldungen nennen keinen Zweck — der kommt aus HR."""
+        q = self._quelle_mit_hr([{"id": "hr-1"}],
+                                "Betrieb einer Garage und Autohandel")
+        q._liste = lambda seit, bis: [{"id": "x", "datum": "2026-09-18",
+                                       "titel": "Konkurseröffnung",
+                                       "kanton": "ZH", "pdf": None}]
+        q._detail = lambda pid: {"firma": "Meier Auto AG",
+                                 "uid": "CHE-116.284.335", "ort": "Kloten",
+                                 "_art": "company", "text": "..."}
+        satz = q.holen("2026-09-01")[0]
+        self.assertEqual(satz["zweck"], "Betrieb einer Garage und Autohandel")
+        self.assertIn("Zweckartikel", " ".join(q.protokoll))
+
+    def test_zwecksuche_merkt_sich_den_parameter(self):
+        """Der Parametername wird einmal gesucht, dann gemerkt."""
+        q = self._quelle_mit_hr([{"id": "hr-1"}], "Transporte",
+                                param_der_geht="query")
+        self.assertEqual(q._zweck_zu_uid("CHE-116.284.335"), "Transporte")
+        self.assertEqual(q.uid_parameter, "query")
+        erste_runde = len(q.versuche)
+        # Zweite, andere UID: nur noch ein Versuch.
+        q._zweck_zu_uid("CHE-113.766.916")
+        self.assertEqual(len(q.versuche), erste_runde + 1)
+
+    def test_zwecksuche_ohne_treffer_bleibt_folgenlos(self):
+        """Findet keine Variante etwas, läuft der Rest trotzdem weiter."""
+        q = self._quelle_mit_hr([], None, param_der_geht="gibtsnicht")
+        q._liste = lambda seit, bis: [{"id": "x", "datum": "2026-09-18",
+                                       "titel": "Konkurseröffnung",
+                                       "kanton": "ZH", "pdf": None}]
+        q._detail = lambda pid: {"firma": "Meier AG",
+                                 "uid": "CHE-116.284.335", "ort": "Kloten",
+                                 "_art": "company", "text": "..."}
+        saetze = q.holen("2026-09-01")
+        self.assertEqual(len(saetze), 1)
+        self.assertFalse(saetze[0].get("zweck"))
+
+    def test_zwecksuche_abschaltbar(self):
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        self.assertFalse(
+            AmtsblattQuelle({"zweck_nachschlagen": False}).zweck_nachschlagen)
+
     def test_401_meldung_nennt_den_ausweg(self):
         """Ein 401 darf nicht als „nichts gefunden" durchgehen."""
         import urllib.error

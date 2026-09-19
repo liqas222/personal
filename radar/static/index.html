@@ -216,9 +216,27 @@ async function laden() {
   $("fSchwelle").textContent = d.zahlen.ueber_schwelle;
 
   if (!FAELLE.length) {
-    $("liste").innerHTML = '<div class="leer">Keine Fälle für diese Filter.' +
-      "<br>Importiere eine CSV-, JSON- oder PDF-Datei, um zu beginnen." +
-      "<br><br>Beispieldatei: <b>radar/beispiel/konkurse.csv</b></div>";
+    // „Nichts da" und „nichts über der Schwelle" sind zwei verschiedene
+    // Lagen. Sind Fälle erfasst, ist der Rat „importiere eine Datei"
+    // schlicht falsch — und er verdeckt, dass der Filter der Grund ist.
+    const gesamt = Number(d.zahlen.gesamt) || 0;
+    $("liste").innerHTML = gesamt
+      ? '<div class="leer"><b>' + gesamt + " Fälle erfasst, aber keiner " +
+        "passt auf diese Filter.</b><br>Score ab <b>" +
+        ($("minscore").value || 0) + "</b> ist die wahrscheinlichste " +
+        "Ursache." +
+        "<br><br>Konkurspublikationen enthalten <b>keinen " +
+        "Zweckartikel</b> — der steht im Handelsregister. Ohne ihn " +
+        "trägt nur der Firmenname, und die meisten Fälle bleiben " +
+        "deshalb unter 60." +
+        '<br><br><button id="alleZeigen">Alle Fälle zeigen (Score ab 0)' +
+        "</button></div>"
+      : '<div class="leer">Noch keine Fälle.' +
+        "<br>„Jetzt abrufen“ drücken oder eine CSV-, JSON- oder " +
+        "PDF-Datei importieren." +
+        "<br><br>Beispieldatei: <b>radar/beispiel/konkurse.csv</b></div>";
+    const knopf = $("alleZeigen");
+    if (knopf) knopf.onclick = () => { $("minscore").value = 0; laden(); };
     return;
   }
   const kopf = ["Firma", "Ort", "KT", "Branche", "Publiziert", "Meldungsart",

@@ -53,10 +53,21 @@ Protokoll.
   findet sich keine `id`, jeder Eintrag fliegt raus — und eine
   antwortende Schnittstelle sieht aus wie eine leere. Das hat drei
   Runden gekostet.
-- **Der Zweckartikel fehlt in Konkurspublikationen.** Er steht im
-  Handelsregister, nicht in der Konkursmeldung. Für die Bewertung ist das
-  die wichtigste Angabe — die Lücke wird hingeschrieben, nicht mit
-  geratenen Punkten überdeckt.
+- **Der Zweckartikel fehlt in Konkurspublikationen** — er steht im
+  Handelsregister. Ohne ihn trägt nur der Firmenname: der erste echte
+  Lauf fand 60 Firmen und **keine einzige** über Score 60. Geholt wird er
+  jetzt aus den HR-Rubriken DESSELBEN Portals (`_zweck_zu_uid`), also
+  ohne zweite Quelle. Der Suchparameter ist nicht dokumentiert, wird
+  einmal ausprobiert und gemerkt; `radar.pruefen` Schritt 5 zeigt ihn.
+- **„Keine Fälle" und „nichts über der Schwelle" sind zwei Lagen.** Die
+  Oberfläche riet „importiere eine CSV-Datei", während sechzig Fälle in
+  der Datenbank lagen. Sind Fälle da, nennt die Leermeldung Zahl, Grund
+  und einen Knopf auf Score 0.
+- **`node tools/pruefe_ui.js radar/static/index.html` nach jeder
+  Textänderung im UI.** Ein gerades Anführungszeichen in einem
+  JS-String („Jetzt abrufen") hat das ganze Skript zerlegt — die Seite
+  lud und blieb leer. Das Werkzeug findet es in einer Sekunde und nennt
+  die Zeilennummer der HTML-Datei.
 - **`python3 -m radar.pruefen` ist der Beweis, nicht die Behauptung.** Vier
   Schritte gegen die echte Schnittstelle, nur lesend. Weichen Rubrikcodes
   oder Feldnamen ab, sagt es das und nennt den Eintrag, der zu ändern ist.
