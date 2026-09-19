@@ -60,6 +60,12 @@ Protokoll.
 - **`python3 -m radar.pruefen` ist der Beweis, nicht die Behauptung.** Vier
   Schritte gegen die echte Schnittstelle, nur lesend. Weichen Rubrikcodes
   oder Feldnamen ab, sagt es das und nennt den Eintrag, der zu ändern ist.
+- **Einstellungen kriegen einen Befehl, keinen Schnipsel.**
+  `python3 -m radar.einrichten --an` statt „trag das in config.json ein".
+  Der JSON-Schnipsel wurde genau einmal in die Shell geklebt und ergab
+  `amtsblatt:: command not found` — die Einstellung war nicht gesetzt, sah
+  aber aus, als wäre etwas passiert. Der Befehl ergänzt die Datei und
+  überschreibt sie nicht; `auth_token` und Port bleiben stehen.
 - **Abruf standardmässig aus.** `"amtsblatt": {"aktiv": false}` im
   Auslieferungsstand; `auto` (12-Stunden-Schleife) ist eine zweite,
   getrennte Entscheidung. Der Atlas ruft weiterhin nichts ab — die Regel

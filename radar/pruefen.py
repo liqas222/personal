@@ -163,10 +163,17 @@ def main(argv=None):
                   % (s.get("firma"), s.get("ort"), s.get("uid"),
                      (s.get("meldungsart") or "")[:40]))
         print("\nErgebnis: die Schnittstelle funktioniert.")
-        print("Automatischen Tageslauf einschalten: in radar/config.json")
-        print('  "amtsblatt": { "aktiv": true, "auto": true, '
-              '"basis_url": %s, "zusatz_parameter": %s }'
-              % (json.dumps(basis), json.dumps(zusatz)))
+        # Ein Befehl zum Kopieren, kein JSON-Schnipsel: ein Schnipsel in
+        # der Shell ergibt „amtsblatt:: command not found", und die
+        # Einstellung ist dann nicht gesetzt, sieht aber so aus.
+        print("Einschalten:")
+        print("  python3 -m radar.einrichten --an "
+              "--kantone ZH,AG,ZG,SZ,SG,LU")
+        print("  sudo systemctl restart atlas")
+        if basis != BASIS:
+            print("Abweichende Adresse — zusätzlich in radar/config.json "
+                  "unter \"amtsblatt\" eintragen: \"basis_url\": %s"
+                  % json.dumps(basis))
         return 0
     except Exception as e:
         print("%s: %s" % (type(e).__name__, e))

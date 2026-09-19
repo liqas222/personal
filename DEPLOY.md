@@ -82,19 +82,20 @@ Detail-XML mit Feldnamen, voller Adapterlauf. Weichen Rubrikcodes oder
 Feldnamen ab, steht es dort und lässt sich in `radar/config.json` bzw. in
 `radar/quellen/amtsblatt.py` nachziehen.
 
-Erst wenn Schritt 4 „die Schnittstelle funktioniert" meldet, einschalten —
-in `/opt/atlas/radar/config.json`:
+Erst wenn Schritt 4 „die Schnittstelle funktioniert" meldet, einschalten:
 
-```json
-"amtsblatt": { "aktiv": true, "auto": true, "kantone": ["ZH","AG","ZG","SZ","SG","LU"] },
-"loeschfrist_tage": 730
+```bash
+cd /opt/atlas && python3 -m radar.einrichten --an --kantone ZH,AG,ZG,SZ,SG,LU && sudo systemctl restart atlas
 ```
 
-`auto` lässt alle 12 Stunden einen Lauf mitlaufen; ohne `auto` wird nur
-abgerufen, wenn im Radar „Jetzt abrufen" gedrückt wird. `loeschfrist_tage`
-räumt unbearbeitete Fälle nach dieser Frist weg — bearbeitete bleiben.
+Das ist ein Befehl, kein Textbaustein — bestehende Einträge in
+`radar/config.json` (Port, `auth_token`, eigene Adressen) bleiben
+erhalten, es wird nur ergänzt.
 
-Nach dem Ändern der Konfiguration: `sudo systemctl restart atlas`.
+Ohne Angabe läuft der Abruf alle 12 Stunden von selbst. Wer lieber nur auf
+Knopfdruck abruft, nimmt `--kein-auto`. Abschalten: `--aus`. Ohne jede
+Option zeigt der Befehl nur den Stand an. Die Löschfrist für unbearbeitete
+Fälle setzt `--loeschfrist 730` (0 = nie).
 
 Der alte SHAB-Adapter bleibt abgeschaltet und unverifiziert; er wird nicht
 gebraucht. Für den PDF-Import:

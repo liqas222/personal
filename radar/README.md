@@ -19,7 +19,7 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 58 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 60 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
@@ -135,18 +135,32 @@ Liste zu liefern.
 
 ### Automatischer Lauf
 
-Eingeschaltet in `radar/config.json`:
-
-```json
-"amtsblatt": { "aktiv": true, "auto": true, "intervall_stunden": 12 }
+```bash
+python3 -m radar.einrichten --an --kantone ZH,AG,ZG,SZ,SG,LU
+sudo systemctl restart atlas
 ```
 
 Der Serverprozess holt dann alle zwölf Stunden die neuen Publikationen seit
 dem letzten erfolgreichen Lauf. Ein Fehler beendet die Schleife nicht —
 eine Quelle, die heute nicht antwortet, antwortet morgen vielleicht.
 
-Wer lieber cron benutzt, setzt `"auto": false` und nimmt
-`python3 -m radar.lauf --shab`.
+| Option | Wirkung |
+|---|---|
+| (keine) | zeigt nur den aktuellen Stand |
+| `--an` | Abruf ein, Tageslauf dazu |
+| `--an --kein-auto` | Abruf ein, aber nur über „Jetzt abrufen" |
+| `--aus` | Abruf ab |
+| `--kantone ZH,SG` | auf diese Kantone beschränken (leer = alle) |
+| `--loeschfrist 730` | Tage bis unbearbeitete Fälle wegfallen (0 = nie) |
+
+Der Befehl **ergänzt** `radar/config.json` und überschreibt sie nicht;
+Port, `auth_token` und eigene Adressen bleiben stehen. Das ersetzt die
+frühere Anleitung „trag diesen JSON-Schnipsel ein" — in eine Shell geklebt
+ergab der `amtsblatt:: command not found`, und die Einstellung war nicht
+gesetzt, sah aber aus, als wäre etwas passiert.
+
+Wer lieber cron benutzt, nimmt `--an --kein-auto` und ruft
+`python3 -m radar.lauf --shab` auf.
 
 ### Nutzungsbedingungen
 
@@ -319,7 +333,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            58 Tests, kein Netz nötig
+└── tests/            60 Tests, kein Netz nötig
 ```
 
 ### Tests

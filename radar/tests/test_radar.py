@@ -533,6 +533,39 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         self.assertIn("1 natürliche Personen übersprungen",
                       " ".join(q.protokoll))
 
+    def test_einrichten_erhaelt_bestehende_einstellungen(self):
+        """Einschalten darf nichts wegwerfen — auch nicht den auth_token."""
+        from radar import einrichten
+        with tempfile.TemporaryDirectory() as ordner:
+            pfad = os.path.join(ordner, "config.json")
+            with open(pfad, "w", encoding="utf-8") as f:
+                json.dump({"auth_token": "geheim", "port": 8899,
+                           "amtsblatt": {"basis_url": "https://x/api/v1"}}, f)
+            alt, einrichten.PFAD = einrichten.PFAD, pfad
+            try:
+                einrichten.main(["--an", "--kantone", "ZH,SG"])
+                cfg = json.load(open(pfad, encoding="utf-8"))
+            finally:
+                einrichten.PFAD = alt
+        self.assertEqual(cfg["auth_token"], "geheim")
+        self.assertEqual(cfg["port"], 8899)
+        self.assertEqual(cfg["amtsblatt"]["basis_url"], "https://x/api/v1")
+        self.assertTrue(cfg["amtsblatt"]["aktiv"])
+        self.assertEqual(cfg["amtsblatt"]["kantone"], ["ZH", "SG"])
+
+    def test_einrichten_legt_datei_an(self):
+        from radar import einrichten
+        with tempfile.TemporaryDirectory() as ordner:
+            pfad = os.path.join(ordner, "config.json")
+            alt, einrichten.PFAD = einrichten.PFAD, pfad
+            try:
+                einrichten.main(["--an"])
+                cfg = json.load(open(pfad, encoding="utf-8"))
+            finally:
+                einrichten.PFAD = alt
+        self.assertTrue(cfg["amtsblatt"]["aktiv"])
+        self.assertTrue(cfg["amtsblatt"]["auto"])
+
     def test_401_meldung_nennt_den_ausweg(self):
         """Ein 401 darf nicht als „nichts gefunden" durchgehen."""
         import urllib.error
