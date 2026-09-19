@@ -474,6 +474,65 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         self.assertEqual(q._absolut("https://anderswo/x.pdf"),
                          "https://anderswo/x.pdf")
 
+    def test_privatperson_wird_erkannt(self):
+        """Echte Feldform aus dem Dienst (KK04, Winterthur, 2026-09-18).
+
+        Nachname, Vorname, Geburtsdatum, keine UID — eine Privatperson.
+        Der erste echte Lauf hat solche Publikationen als „Firma"
+        eingelesen. Das darf nicht wieder passieren.
+        """
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        person = {"_art": "person", "firma": "Güney", "_vorname": "Alpay",
+                  "_geburtsdatum": "1991-04-30", "uid": None,
+                  "ort": "Winterthur"}
+        self.assertTrue(AmtsblattQuelle._ist_person(person))
+
+    def test_firma_wird_nicht_aussortiert(self):
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        firma = {"_art": "company", "firma": "Rhystrans Logistik AG",
+                 "uid": "CHE-116.284.335", "ort": "Kloten"}
+        self.assertFalse(AmtsblattQuelle._ist_person(firma))
+
+    def test_ohne_selecttype_entscheidet_geburtsdatum(self):
+        """Fehlt selectType, zählt Geburtsdatum/Vorname ohne UID."""
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        self.assertTrue(AmtsblattQuelle._ist_person(
+            {"_geburtsdatum": "1980-01-01", "firma": "Meier"}))
+        # Eine Firma mit UID bleibt eine Firma, auch ohne selectType.
+        self.assertFalse(AmtsblattQuelle._ist_person(
+            {"firma": "Meier Transport AG", "uid": "CHE-116.284.335"}))
+
+    def test_hilfsfelder_landen_nicht_im_satz(self):
+        """Die `_`-Felder dienen nur der Entscheidung, nicht dem Speichern."""
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        q = AmtsblattQuelle({})
+        q._liste = lambda seit, bis: [{"id": "x", "datum": "2026-09-18",
+                                       "titel": "Konkurseröffnung",
+                                       "kanton": "ZH", "pdf": None}]
+        q._detail = lambda pid: {"firma": "Rhystrans Logistik AG",
+                                 "uid": "CHE-116.284.335", "ort": "Kloten",
+                                 "_art": "company", "_vorname": None,
+                                 "_geburtsdatum": None, "text": "..."}
+        q.pause = 0
+        satz = q.holen("2026-09-01")[0]
+        self.assertEqual(satz["firma"], "Rhystrans Logistik AG")
+        self.assertFalse([s for s in satz if s.startswith("_")])
+
+    def test_lauter_personen_ist_kein_fehler(self):
+        """Ein Lauf ohne Firmen ist ein Ergebnis, kein Fehlschlag."""
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        q = AmtsblattQuelle({})
+        q._liste = lambda seit, bis: [{"id": "x", "datum": "2026-09-18",
+                                       "titel": "Kollokationsplan",
+                                       "kanton": "ZH", "pdf": None}]
+        q._detail = lambda pid: {"firma": "Güney", "_art": "person",
+                                 "_geburtsdatum": "1991-04-30",
+                                 "ort": "Winterthur", "text": "..."}
+        q.pause = 0
+        self.assertEqual(q.holen("2026-09-01"), [])
+        self.assertIn("1 natürliche Personen übersprungen",
+                      " ".join(q.protokoll))
+
     def test_401_meldung_nennt_den_ausweg(self):
         """Ein 401 darf nicht als „nichts gefunden" durchgehen."""
         import urllib.error

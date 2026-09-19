@@ -336,16 +336,60 @@ class AmtsblattQuelle(Quelle):
             "ort": _text(wurzel, "town", "city", "municipality", "seat",
                          "legalSeat"),
             "zweck": _text(wurzel, "purpose", "zweck", "businessPurpose"),
-            "konkursamt": _text(wurzel, "officeName", "registryOffice",
+            # Die echten Feldnamen aus dem Dienst (geprüft 2026-09-19):
+            # das zuständige Amt steht in
+            # `registrationOfficeAndCirculationAuthority`, sein Klarname
+            # zusätzlich in `displayName`.
+            "konkursamt": _text(wurzel,
+                                "registrationOfficeAndCirculationAuthority",
+                                "displayName", "officeName", "registryOffice",
                                 "bankruptcyOffice", "office"),
-            "aktenzeichen": _text(wurzel, "caseNumber", "referenceNumber",
-                                  "fileNumber"),
+            # `publicationNumber` (z. B. KK04-0000060367) ist das, was ein
+            # Konkursamt am Telefon versteht — die interne uuid nicht.
+            "aktenzeichen": _text(wurzel, "publicationNumber", "caseNumber",
+                                  "referenceNumber", "fileNumber"),
             "konkursdatum": _text(wurzel, "bankruptcyDate", "decisionDate",
                                   "openingDate"),
             "gruendung": _text(wurzel, "registrationDate", "foundingDate"),
+            # Nicht zum Speichern, sondern zum Aussortieren: siehe
+            # `_ist_person()`.
+            "_art": _text(wurzel, "selectType"),
+            "_vorname": _text(wurzel, "prename"),
+            "_geburtsdatum": _text(wurzel, "dateOfBirth"),
         }
         d["text"] = _sammle_text(wurzel)[:4000]
         return d
+
+    @staticmethod
+    def _ist_person(d):
+        """Ist diese Publikation eine natürliche Person?
+
+        WARUM DAS SEIN MUSS — das ist der wichtigste Filter im Adapter.
+
+        Ein grosser Teil der Konkurs- und Betreibungsrubriken betrifft
+        Privatpersonen, nicht Firmen. Der Dienst liefert dazu Nachnamen,
+        Vornamen und **Geburtsdaten**. Der erste echte Lauf holte prompt
+        Privatleute samt Geburtsdatum herein und zeigte sie als „Firma".
+
+        Zwei Gründe, das zu unterbinden:
+
+        1. Sie gehören nicht zur Aufgabe. Gesucht sind Betriebe mit
+           Maschinen, Fahrzeugen und Lager. Bei einer Privatperson gibt es
+           keine Betriebsausstattung zu verwerten.
+        2. Daten über Privatleute, die niemand braucht, gehören nicht in
+           eine Datenbank. Was gar nicht erst gespeichert wird, muss auch
+           nicht gelöscht, geschützt oder verantwortet werden.
+
+        Erkannt wird es am ausdrücklichen `selectType` des Dienstes und,
+        falls der fehlt, am Vornamen oder Geburtsdatum ohne UID.
+        """
+        art = (d.get("_art") or "").strip().lower()
+        if art in ("person", "naturalperson", "natuerliche_person"):
+            return True
+        if art in ("company", "legalentity", "juristische_person"):
+            return False
+        return bool(d.get("_geburtsdatum") or d.get("_vorname")) \
+            and not d.get("uid")
 
     # -- Hauptlauf --------------------------------------------------------
 
@@ -391,7 +435,7 @@ class AmtsblattQuelle(Quelle):
         self.protokoll.append("%d Publikationen im Zeitraum %s bis %s"
                               % (len(kopfdaten), seit, bis))
 
-        raus, fehler = [], 0
+        raus, fehler, personen = [], 0, 0
         for k in kopfdaten[:self.max_details]:
             satz = {
                 "publikationsdatum": k.get("datum"),
@@ -403,21 +447,39 @@ class AmtsblattQuelle(Quelle):
                 "quelle": "Amtsblattportal",
             }
             try:
-                satz.update({a: b for a, b in self._detail(k["id"]).items()
-                             if b})
+                detail = self._detail(k["id"])
             except Exception as e:
                 fehler += 1
                 self.protokoll.append("Detail %s: %s" % (k["id"], e))
+                time.sleep(self.pause)
+                continue
+
+            if self._ist_person(detail):
+                # Privatperson: verwerfen, bevor irgendetwas davon in den
+                # Satz kommt. Gezählt wird sie, damit im Protokoll
+                # sichtbar bleibt, wie viel der Lauf bewusst weglässt.
+                personen += 1
+                time.sleep(self.pause)
+                continue
+
+            # Die Hilfsfelder mit `_` sind nur für diese Entscheidung da
+            # und dürfen nicht weitergereicht werden.
+            satz.update({a: b for a, b in detail.items()
+                         if b and not a.startswith("_")})
             if satz.get("firma"):
                 raus.append(satz)
             time.sleep(self.pause)
 
-        self.protokoll.append("%d verwertbare Sätze, %d Details fehlgeschlagen"
-                              % (len(raus), fehler))
-        if kopfdaten and not raus:
+        self.protokoll.append(
+            "%d verwertbare Sätze, %d natürliche Personen übersprungen, "
+            "%d Details fehlgeschlagen" % (len(raus), personen, fehler))
+        if kopfdaten and not raus and not personen:
             # Wichtig: nicht schweigend nichts zurückgeben. Wenn die Liste
             # Treffer hatte, das Detail-XML aber keine Firmennamen hergab,
             # stimmen die Feldnamen nicht — und das muss auffallen.
+            #
+            # Waren es dagegen lauter Privatpersonen, ist ein leeres
+            # Ergebnis richtig und kein Fehler — deshalb `not personen`.
             raise RuntimeError(
                 "%d Publikationen gefunden, aber keine auswertbaren "
                 "Firmendaten. Vermutlich heissen die Felder im Detail-XML "

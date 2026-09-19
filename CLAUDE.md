@@ -35,10 +35,28 @@ Protokoll.
 - Der Score ist eine Sortierhilfe, keine Wertangabe, und jede Zeile nennt
   Punkte, Grund und Herkunft.
 - **Keinen verifizierten Live-Zugang behaupten, der keiner ist.** Der
-  Amtsblatt-Adapter (`radar/quellen/amtsblatt.py`) ist gegen einen
-  nachgebauten Dienst geprüft, gegen `amtsblattportal.ch` nie — aus dieser
+  Amtsblatt-Adapter (`radar/quellen/amtsblatt.py`) läuft inzwischen gegen
+  den echten Dienst — geprüft auf dem Server, nicht hier: aus dieser
   Umgebung ist der Host gesperrt. Was geprüft ist und was nicht, steht so
   in `radar/README.md` und gehört dort auch hin.
+- **Privatpersonen gehören nicht in die Datenbank.** Ein grosser Teil der
+  Konkurs- und Betreibungsrubriken betrifft natürliche Personen — der
+  Dienst liefert Nachname, Vorname und Geburtsdatum. `_ist_person()`
+  sortiert sie aus, bevor irgendetwas gespeichert wird. Der erste echte
+  Lauf holte sie prompt herein und zeigte sie als „Firma"; was gar nicht
+  erst gespeichert wird, muss auch nicht geschützt werden.
+- **Ein Lauf ohne Firmen ist ein Ergebnis, kein Fehler.** Übersprungene
+  Personen werden gezählt und protokolliert; nur wenn gar nichts
+  auswertbar war UND keine Person dabei war, wirft der Adapter.
+- **Die Antwort des Dienstes ist verschachtelt.** Kopfdaten unter `meta`,
+  Titel je Sprache, PDF-Link relativ unter `links.pdf`. Flach nachgesehen
+  findet sich keine `id`, jeder Eintrag fliegt raus — und eine
+  antwortende Schnittstelle sieht aus wie eine leere. Das hat drei
+  Runden gekostet.
+- **Der Zweckartikel fehlt in Konkurspublikationen.** Er steht im
+  Handelsregister, nicht in der Konkursmeldung. Für die Bewertung ist das
+  die wichtigste Angabe — die Lücke wird hingeschrieben, nicht mit
+  geratenen Punkten überdeckt.
 - **`python3 -m radar.pruefen` ist der Beweis, nicht die Behauptung.** Vier
   Schritte gegen die echte Schnittstelle, nur lesend. Weichen Rubrikcodes
   oder Feldnamen ab, sagt es das und nennt den Eintrag, der zu ändern ist.

@@ -19,12 +19,12 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 53 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 58 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
-| **Live-Abruf Amtsblattportal** | Gegen den echten Dienst geprüft bis zur Trefferliste: sie **antwortet mit Publikationen**, und die werden gelesen. Der Detailabruf ist erst gegen einen Nachbau gelaufen — siehe unten |
+| **Live-Abruf Amtsblattportal** | **läuft**, gegen den echten Dienst geprüft: Trefferliste, Detailabruf und Feldzuordnung liefern echte Fälle. Einschränkung beim Zweckartikel — siehe unten |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
@@ -46,18 +46,16 @@ abgedeckt. Kein Schlüssel, kein Konto, kein HTML-Scraping.
 Rubriken: **KK01** Konkurseröffnung, **KK02** Schuldenruf, **KK03**
 Kollokationsplan und Inventar, dazu die SB-Rubriken für Steigerungen.
 
-**Geprüft ist:** der Adapter selbst. Er wurde gegen einen nachgebauten
-Dienst laufen gelassen, der antwortet, wie die Dokumentation es beschreibt
-— Paginierung, Detailabruf, Feldzuordnung, Bewertung, Duplikaterkennung.
-Auch jeder Fehlerweg ist geprüft: falsche Adresse, Dienst nicht erreichbar,
-Detail-XML mit unerwarteten Feldnamen.
+**Geprüft ist:** der ganze Weg, gegen den echten Dienst — Rubrikliste,
+Trefferliste, Detailabruf, Feldzuordnung. Der Adapter liest echte Fälle.
+Die Fehlerwege sind zusätzlich gegen nachgebaute Dienste geprüft: falsche
+Adresse, Dienst nicht erreichbar, abgelehnte Abfrage, Antwort mit
+unerwarteten Feldnamen, Antwort ohne Einträge.
 
-**Nicht geprüft ist:** ob der echte Dienst genauso antwortet. Aus der
-Entwicklungsumgebung ist `amtsblattportal.ch` von der Netzrichtlinie
-gesperrt. Adresse, Parameter und Rubrikcodes stammen aus öffentlicher
-Dokumentation und aus quelloffenen Projekten, die diese Schnittstelle
-benutzen — das ist etwas anderes als ausgedacht, aber kein Ersatz für einen
-echten Lauf.
+**Nicht geprüft ist** der Dauerbetrieb: ob die Feldnamen über alle zwölf
+Konkurs- und sieben Betreibungsrubriken gleich heissen, ist an einer
+Handvoll Publikationen gesehen, nicht an allen. Fällt etwas heraus, steht
+es im Protokoll unter „Letzter Lauf".
 
 **Was die echten Läufe ergeben haben** (Server, 2026-09-19, drei Runden):
 
@@ -78,11 +76,44 @@ echten Lauf.
   auf Deutsch genommen, der PDF-Link absolut gemacht. Zwei Tests halten
   das fest.
 
-**Noch nicht gegen den echten Dienst geprüft** ist alles ab dem
-Detailabruf: ob `/publications/{id}/xml` die Felder so nennt, wie der
-Adapter sie sucht (Firmenname, UID, Sitz, Zweck, Konkursamt). Schritt 3
-der Prüfung listet die tatsächlichen Feldnamen auf — das ist die nächste
-offene Frage.
+* Der Detailabruf liefert die Felder. Sie heissen teils anders als
+  angenommen und sind nachgezogen: das zuständige Amt steht in
+  `registrationOfficeAndCirculationAuthority` (Klarname zusätzlich in
+  `displayName`), das Aktenzeichen in `publicationNumber` (`KK04-0000060367`
+  — das ist, was ein Konkursamt am Telefon versteht; die interne uuid
+  nicht). Ort ist `town`, Firmenname `name`.
+
+### Privatpersonen werden übersprungen
+
+Der erste echte Lauf holte **Privatleute** herein — Nachname, Vorname und
+**Geburtsdatum** — und zeigte sie als „Firma": `Güney`, `Dljsselbloem`,
+`Holgate`. Ein grosser Teil der Konkurs- und Betreibungsrubriken betrifft
+natürliche Personen, nicht Betriebe.
+
+Das ist abgestellt (`_ist_person()`), aus zwei Gründen:
+
+1. **Sie gehören nicht zur Aufgabe.** Gesucht sind Betriebe mit Maschinen,
+   Fahrzeugen und Lager. Bei einer Privatperson gibt es keine
+   Betriebsausstattung zu verwerten.
+2. **Daten über Privatleute, die niemand braucht, gehören nicht in eine
+   Datenbank.** Was gar nicht erst gespeichert wird, muss nicht gelöscht,
+   geschützt oder verantwortet werden.
+
+Erkannt wird es am `selectType` des Dienstes und, falls der fehlt, an
+Vorname oder Geburtsdatum ohne UID. Übersprungene Publikationen werden
+**gezählt und protokolliert** — ein Lauf ohne Firmen ist damit ein
+Ergebnis und kein Fehlschlag.
+
+### Was fehlt: der Zweckartikel
+
+Die Konkurspublikationen enthalten **keinen Zweckartikel**. Der steht im
+Handelsregister, nicht in der Konkursmeldung. Für die Bewertung ist das
+die wichtigste Angabe — ohne sie tragen nur der Firmenname („… Transport
+AG", „Garage …") und der Meldungstext, und viele Fälle bleiben deshalb
+unter der Schwelle.
+
+Das ist eine echte Lücke und keine Kleinigkeit. Sie wird hier
+hingeschrieben statt mit geratenen Punkten überdeckt.
 
 **Deshalb zuerst das hier ausführen:**
 
@@ -288,7 +319,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            53 Tests, kein Netz nötig
+└── tests/            58 Tests, kein Netz nötig
 ```
 
 ### Tests

@@ -151,6 +151,13 @@ def main(argv=None):
                               "zusatz_parameter": zusatz})
         saetze = q2.holen(seit)
         print("%d verwertbare Sätze" % len(saetze))
+        for z in q2.protokoll[-1:]:
+            print("  " + z)
+        if not saetze:
+            print("  Keine Firma dabei — in diesem Zeitraum betrafen die "
+                  "Publikationen offenbar nur Privatpersonen. Die werden "
+                  "bewusst übersprungen; siehe _ist_person() in "
+                  "radar/quellen/amtsblatt.py.")
         for s in saetze[:3]:
             print("  · %s | %s | UID %s | %s"
                   % (s.get("firma"), s.get("ort"), s.get("uid"),
