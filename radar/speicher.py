@@ -294,6 +294,25 @@ class Speicher:
         r = self.db.execute(sql, werte).fetchone()
         return dict(r) if r else None
 
+    def letzter_lauf_mit_daten(self, quelle=None):
+        """Der letzte Lauf, der tatsächlich etwas gelesen hat.
+
+        Der Unterschied zu `letzter_lauf` ist der entscheidende: ein Lauf
+        ohne Fehler, der null Sätze las, taugt NICHT als Marke für den
+        nächsten Zeitraum. Genau daran ist es schon gescheitert — ein
+        kaputter Adapter lief einmal fehlerfrei durch, las nichts und
+        schob die Marke auf heute. Alles davor war damit unerreichbar.
+        """
+        sql = ("SELECT * FROM laeufe WHERE beendet IS NOT NULL "
+               "AND fehler IS NULL AND gelesen > 0")
+        werte = []
+        if quelle:
+            sql += " AND quelle = ?"
+            werte.append(quelle)
+        sql += " ORDER BY id DESC LIMIT 1"
+        r = self.db.execute(sql, werte).fetchone()
+        return dict(r) if r else None
+
     def laeufe(self, limit=20):
         return [dict(r) for r in self.db.execute(
             "SELECT * FROM laeufe ORDER BY id DESC LIMIT ?", (limit,))]

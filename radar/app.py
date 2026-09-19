@@ -294,7 +294,8 @@ def behandle_post(pfad, koerper, content_type, dateiname=None):
         return _json_antwort(bericht)
 
     if pfad == "/api/abrufen":
-        return _json_antwort(abrufen())
+        d = json.loads(koerper or b"{}")
+        return _json_antwort(abrufen(d.get("tage")))
 
     if pfad == "/api/status":
         d = json.loads(koerper or b"{}")
@@ -311,20 +312,63 @@ def behandle_post(pfad, koerper, content_type, dateiname=None):
     return None
 
 
-def abrufen():
+def _zeitraum(sp, quelle, tage=None):
+    """Ab welchem Datum geholt wird. Gibt "JJJJ-MM-TT" zurück.
+
+    `tage` gewinnt immer: wer ausdrücklich 90 Tage will, bekommt 90 Tage,
+    egal was die Marke sagt. Sonst die Marke des letzten Laufs, der etwas
+    gelesen hat, minus Überlappung. Gibt es keinen solchen Lauf, wird der
+    Erstlauf-Zeitraum genommen.
+    """
+    import datetime
+    c = cfg().get("amtsblatt") or {}
+    heute = datetime.date.today()
+    if tage:
+        return (heute - datetime.timedelta(days=int(tage))).isoformat()
+
+    ueberlappung = int(c.get("ueberlappung_tage", 3))
+    erstlauf = int(c.get("erstlauf_tage", 30))
+    marke = sp.letzter_lauf_mit_daten(quelle)
+    if not marke:
+        return (heute - datetime.timedelta(days=erstlauf)).isoformat()
+    try:
+        d = datetime.date.fromisoformat((marke.get("beendet") or "")[:10])
+    except ValueError:
+        return (heute - datetime.timedelta(days=erstlauf)).isoformat()
+    return (d - datetime.timedelta(days=ueberlappung)).isoformat()
+
+
+def abrufen(tage=None):
     """Einen Abruf beim Amtsblattportal ausführen.
 
     Gibt IMMER zurück, was passiert ist — auch und gerade im Fehlerfall.
     Ein Abruf, der still nichts liefert, ist von einem, bei dem es nichts
     zu holen gab, nicht zu unterscheiden.
+
+    WELCHER ZEITRAUM — hier steckte ein Fehler
+    ------------------------------------------
+    Bisher begann jeder Abruf beim Datum des letzten erfolgreichen Laufs.
+    Klingt richtig, hatte aber zwei Haken:
+
+    1. Auch ein Lauf, der NICHTS gelesen hat, galt als erfolgreich und
+       setzte die Marke auf heute. Als der Adapter noch kaputt war, lief
+       er einmal durch, las null — und schob die Marke vor. Damit lagen
+       die 14 Tage davor für immer hinter der Marke und wurden nie mehr
+       geholt.
+    2. Ohne Überlappung geht alles verloren, was zwischen zwei Läufen
+       nachgetragen oder korrigiert wird.
+
+    Deshalb jetzt: die Marke ist der letzte Lauf, der **wirklich etwas
+    gelesen hat**, minus einer Überlappung (Vorgabe drei Tage).
+    `tage` übergeht das und holt ausdrücklich so weit zurück — das ist
+    der Weg, um Vergangenes nachzuholen.
     """
     sp = speicher()
     q = AmtsblattQuelle(cfg().get("amtsblatt"))
     ok, grund = q.verfuegbar()
     if not ok:
         return {"fehler": grund}
-    letzter = sp.letzter_lauf(q.name)
-    seit = (letzter or {}).get("beendet", "")[:10] or None
+    seit = _zeitraum(sp, q.name, tage)
     lauf = sp.lauf_beginnen(q.name)
     try:
         roh = q.holen(seit)
@@ -342,6 +386,7 @@ def abrufen():
                     bemerkung=bemerkung)
     bericht["protokoll"] = q.protokoll
     bericht["bemerkung"] = bemerkung
+    bericht["seit"] = seit
     aufraeumen()
     return bericht
 

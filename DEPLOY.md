@@ -99,6 +99,13 @@ bekäme Score 0 und fiele still durch. `--kantone alle` geht trotzdem,
 dann sortiert dein Auge statt des Radars. `--kantone ZH,SG` nimmt genau
 diese.
 
+Der erste Abruf holt **30 Tage**, jeder weitere ab dem letzten Lauf mit
+Daten minus drei Tagen Überlappung. Vergangenes nachholen:
+
+```bash
+cd /opt/atlas && python3 -m radar.lauf --abrufen --tage 90
+```
+
 Ohne Angabe läuft der Abruf alle 12 Stunden von selbst. Wer lieber nur auf
 Knopfdruck abruft, nimmt `--kein-auto`. Abschalten: `--aus`. Ohne jede
 Option zeigt der Befehl nur den Stand an. Die Löschfrist für unbearbeitete

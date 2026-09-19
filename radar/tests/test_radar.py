@@ -533,6 +533,57 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         self.assertIn("1 natürliche Personen übersprungen",
                       " ".join(q.protokoll))
 
+    def test_leerer_lauf_schiebt_die_marke_nicht_vor(self):
+        """Der Fehler, der echte Daten gekostet hat.
+
+        Ein kaputter Adapter lief fehlerfrei durch und las null Sätze.
+        Weil das als „letzter erfolgreicher Lauf" zählte, begann der
+        nächste Abruf bei heute — und alles davor war unerreichbar.
+        """
+        with tempfile.TemporaryDirectory() as ordner:
+            sp = Speicher(os.path.join(ordner, "radar.db"))
+            leer = sp.lauf_beginnen("Amtsblattportal")
+            sp.lauf_beenden(leer, 0, 0, 0, 0)
+            self.assertIsNone(sp.letzter_lauf_mit_daten("Amtsblattportal"))
+            # Ein Lauf MIT Daten zählt.
+            voll = sp.lauf_beginnen("Amtsblattportal")
+            sp.lauf_beenden(voll, 5, 5, 0, 0)
+            self.assertEqual(
+                sp.letzter_lauf_mit_daten("Amtsblattportal")["gelesen"], 5)
+            # Ein gescheiterter Lauf danach ändert die Marke nicht.
+            kaputt = sp.lauf_beginnen("Amtsblattportal")
+            sp.lauf_beenden(kaputt, 0, 0, 0, 0, "HTTPError: 500")
+            self.assertEqual(
+                sp.letzter_lauf_mit_daten("Amtsblattportal")["gelesen"], 5)
+            sp.schliessen()
+
+    def test_zeitraum(self):
+        """Erstlauf, Überlappung und ausdrücklicher Zeitraum."""
+        import datetime
+
+        from radar import app
+        heute = datetime.date.today()
+        with tempfile.TemporaryDirectory() as ordner:
+            sp = Speicher(os.path.join(ordner, "radar.db"))
+
+            # Ohne jeden Lauf: der Erstlauf-Zeitraum, 30 Tage.
+            self.assertEqual(
+                app._zeitraum(sp, "Amtsblattportal"),
+                (heute - datetime.timedelta(days=30)).isoformat())
+
+            # Ausdrücklich gefordert gewinnt immer.
+            self.assertEqual(
+                app._zeitraum(sp, "Amtsblattportal", 90),
+                (heute - datetime.timedelta(days=90)).isoformat())
+
+            # Nach einem Lauf mit Daten: dessen Datum minus Überlappung.
+            lauf = sp.lauf_beginnen("Amtsblattportal")
+            sp.lauf_beenden(lauf, 3, 3, 0, 0)
+            self.assertEqual(
+                app._zeitraum(sp, "Amtsblattportal"),
+                (heute - datetime.timedelta(days=3)).isoformat())
+            sp.schliessen()
+
     def test_alte_datenbank_bekommt_die_neue_spalte(self):
         """Eine bestehende Datenbank darf nicht weggeworfen werden.
 

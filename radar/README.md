@@ -19,7 +19,7 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 64 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 66 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
@@ -129,6 +129,35 @@ gefunden".
 Die **Kantonsknöpfe in der Oberfläche** kommen aus den Daten — gezeigt
 wird, was tatsächlich erfasst ist. Vorher waren sie fest auf sechs
 verdrahtet; bei 19 Kantonen wäre der Rest nicht filterbar gewesen.
+
+### Welcher Zeitraum geholt wird
+
+| Lage | Zeitraum |
+|---|---|
+| noch nie etwas gelesen | die letzten **30 Tage** (`erstlauf_tage`) |
+| es gab schon einen Lauf mit Daten | ab dessen Datum minus **3 Tage** (`ueberlappung_tage`) |
+| ausdrücklich gefordert | genau so weit zurück |
+
+Ausdrücklich fordern geht in der Oberfläche über die Auswahl neben „Jetzt
+abrufen" (7 / 30 / 90 Tage, ein Jahr) oder auf der Kommandozeile:
+
+```bash
+python3 -m radar.lauf --abrufen --tage 90
+```
+
+**Hier steckte ein Fehler, der echte Daten gekostet hat.** Die Marke war
+der letzte Lauf *ohne Fehler* — und ein kaputter Adapter lief einmal
+fehlerfrei durch, las null Sätze und schob die Marke damit auf heute.
+Alles davor lag hinter der Marke und wurde nie wieder geholt; jeder
+weitere Abruf durchsuchte nur noch den laufenden Tag.
+
+Die Marke ist jetzt der letzte Lauf, der **tatsächlich etwas gelesen
+hat** (`letzter_lauf_mit_daten`). Dazu die Überlappung von drei Tagen,
+damit nichts verlorengeht, was zwischen zwei Läufen nachgetragen wird —
+doppelt Geholtes erkennt die Duplikatprüfung ohnehin.
+
+Jeder Abruf sagt danach, ab wann er gesucht hat: „ab 2026-08-20: 12
+gelesen · 12 neu".
 
 ### Was fehlt: der Zweckartikel
 
@@ -361,7 +390,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            64 Tests, kein Netz nötig
+└── tests/            66 Tests, kein Netz nötig
 ```
 
 ### Tests

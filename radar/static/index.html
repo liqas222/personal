@@ -126,6 +126,13 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
   <label>STATUS</label>
   <select id="status"><option value="">alle</option></select>
   <button class="gruen" id="abrufen">Jetzt abrufen</button>
+  <select id="zeitraum" title="Wie weit zurück geholt wird">
+    <option value="">seit dem letzten Lauf</option>
+    <option value="7">letzte 7 Tage</option>
+    <option value="30">letzte 30 Tage</option>
+    <option value="90">letzte 90 Tage</option>
+    <option value="365">letztes Jahr</option>
+  </select>
   <button id="importKnopf">Datei importieren</button>
   <input type="file" id="datei" hidden accept=".csv,.json,.pdf">
   <button id="csv">CSV</button>
@@ -350,11 +357,15 @@ $("abrufen").onclick = async () => {
   try {
     // POST, nicht GET: der Abruf holt Daten und schreibt sie weg, das ist
     // eine Änderung und kein Lesen.
-    const d = await (await fetch("api/abrufen",
-      { method: "POST" })).json();
+    const tage = $("zeitraum").value;
+    const d = await (await fetch("api/abrufen", {
+      method: "POST",
+      body: JSON.stringify(tage ? { tage: Number(tage) } : {}),
+    })).json();
     $("importMeldung").textContent = d.fehler
       ? "Abruf fehlgeschlagen: " + d.fehler
-      : d.gelesen + " gelesen · " + d.neu + " neu · " + d.aktualisiert +
+      : (d.seit ? "ab " + d.seit + ": " : "") +
+        d.gelesen + " gelesen · " + d.neu + " neu · " + d.aktualisiert +
         " aktualisiert" + (d.bemerkung ? " — " + d.bemerkung : "");
     if (d.protokoll) console.log(d.protokoll.join("\n"));
   } catch (e) {

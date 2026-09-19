@@ -93,6 +93,15 @@ Protokoll.
 - **Die Kantonsknöpfe kommen aus den Daten**, nicht aus einer festen
   Liste. Sechs verdrahtete Knöpfe bei 19 abgerufenen Kantonen hätten den
   Rest unfilterbar gemacht.
+- **Die Zeitmarke ist der letzte Lauf MIT Daten**, nicht der letzte ohne
+  Fehler. Ein kaputter Adapter lief einmal fehlerfrei durch, las null und
+  schob die Marke auf heute — alles davor war damit unerreichbar, und
+  jeder weitere Abruf durchsuchte nur noch den laufenden Tag. Dazu drei
+  Tage Überlappung; doppelt Geholtes fängt die Duplikatprüfung.
+  Nachholen geht mit `--tage N` bzw. der Auswahl neben „Jetzt abrufen".
+- **Jeder Abruf sagt, ab wann er gesucht hat.** Ohne diese Angabe ist ein
+  Ergebnis nicht einzuordnen — „0 neu" heisst etwas völlig anderes, je
+  nachdem ob ein Tag oder ein Jahr durchsucht wurde.
 - **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
   unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
 
