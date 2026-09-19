@@ -584,6 +584,31 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         self.assertTrue(cfg["amtsblatt"]["aktiv"])
         self.assertEqual(cfg["amtsblatt"]["kantone"], ["ZH", "SG"])
 
+    def test_kantonsgruppen(self):
+        from radar.einrichten import kantone_lesen
+        from radar.modell import DEUTSCHSPRACHIG
+        self.assertEqual(kantone_lesen("deutsch"), DEUTSCHSPRACHIG)
+        # „alle" heisst: nicht einschränken — eine leere Liste, keine 26.
+        self.assertEqual(kantone_lesen("alle"), [])
+        self.assertEqual(kantone_lesen(" zh , sg "), ["ZH", "SG"])
+
+    def test_deutschsprachige_liste_ist_plausibel(self):
+        from radar.modell import ALLE_KANTONE, DEUTSCHSPRACHIG
+        self.assertEqual(len(DEUTSCHSPRACHIG), 19)
+        for k in DEUTSCHSPRACHIG:
+            self.assertIn(k, ALLE_KANTONE)
+        # Die Romandie und das Tessin bleiben draussen: die Klassierung
+        # sucht deutsche Wörter und fände dort nichts.
+        for k in ("GE", "VD", "NE", "JU", "TI", "FR", "VS"):
+            self.assertNotIn(k, DEUTSCHSPRACHIG)
+
+    def test_tippfehler_im_kanton_wird_abgewiesen(self):
+        """Ein Kanton, den es nicht gibt, filtert sonst still alles weg."""
+        from radar.einrichten import kantone_lesen
+        with self.assertRaises(ValueError) as f:
+            kantone_lesen("ZH,XY")
+        self.assertIn("XY", str(f.exception))
+
     def test_einrichten_legt_datei_an(self):
         from radar import einrichten
         with tempfile.TemporaryDirectory() as ordner:

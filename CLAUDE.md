@@ -84,6 +84,15 @@ Protokoll.
   `CREATE TABLE IF NOT EXISTS` ändert eine vorhandene Tabelle nicht —
   `Speicher._nachruesten()` ergänzt fehlende Spalten per ALTER TABLE. An
   einer bestehenden Datenbank hängt Arbeit.
+- **Die Kantonsauswahl hängt an der Sprache.** `klassierung.py` sucht
+  deutsche Wörter; bei einer französischen oder italienischen Meldung
+  greift keines, der Fall bekäme Score 0 und fiele still durch.
+  `DEUTSCHSPRACHIG` (19 Kantone, BE und GR mit deutscher Mehrheit dabei)
+  ist deshalb die sinnvolle Vorgabe — `--kantone alle` bleibt möglich,
+  aber dann sortiert das Auge, nicht der Radar.
+- **Die Kantonsknöpfe kommen aus den Daten**, nicht aus einer festen
+  Liste. Sechs verdrahtete Knöpfe bei 19 abgerufenen Kantonen hätten den
+  Rest unfilterbar gemacht.
 - **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
   unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
 

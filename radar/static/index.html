@@ -153,13 +153,17 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
 
 <script>
 const $ = (id) => document.getElementById(id);
-const KANTONE = ["ZH", "AG", "ZG", "SZ", "SG", "LU"];
-let gewaehlteKantone = new Set(KANTONE);
+// Die Kantonsknöpfe waren fest auf sechs verdrahtet. Sobald der Abruf
+// mehr Kantone holt, wäre der Rest nicht filterbar und im Zweifel gar
+// nicht sichtbar. Deshalb kommen sie jetzt aus den Daten: gezeigt wird,
+// was tatsächlich erfasst ist.
+let KANTONE = [];
+let gewaehlteKantone = new Set();   // leer = keine Einschränkung
 let FAELLE = [];
 
 function filterParam() {
   const p = new URLSearchParams();
-  if (gewaehlteKantone.size && gewaehlteKantone.size < KANTONE.length + 20)
+  if (gewaehlteKantone.size && gewaehlteKantone.size < KANTONE.length)
     p.set("kanton", [...gewaehlteKantone].join(","));
   p.set("min_score", $("minscore").value || "0");
   if ($("branche").value) p.set("branche", $("branche").value);
@@ -167,7 +171,13 @@ function filterParam() {
   return p;
 }
 
-function bauKantone() {
+function bauKantone(vorhanden) {
+  // Ein Knopf je Kanton, der wirklich Fälle hat. Kein Kanton in den
+  // Daten: gar keine Knöpfe — sechs tote Schalter wären nur Zierde.
+  const neu = (vorhanden || []).filter((k) => k && k !== "?").sort();
+  if (neu.join() === KANTONE.join()) return;
+  KANTONE = neu;
+  gewaehlteKantone = new Set(KANTONE);
   $("kantone").innerHTML = KANTONE.map((k) =>
     '<span class="kchip an" data-k="' + k + '">' + k + "</span>").join(" ");
   $("kantone").querySelectorAll(".kchip").forEach((c) => {
@@ -330,6 +340,7 @@ async function zustand() {
     ? (l.beendet || "").replace("T", " ") + " · " + l.gelesen + " gelesen, " +
       l.neu + " neu" + (l.bemerkung ? " — " + l.bemerkung : "")
     : "noch keiner";
+  bauKantone(Object.keys(d.zahlen.nach_kanton || {}));
   $("stand").textContent = d.zahlen.gesamt + " Fälle erfasst";
 }
 
@@ -394,7 +405,6 @@ $("minscore").onchange = laden;
 $("branche").onchange = laden;
 $("status").onchange = laden;
 
-bauKantone();
 laden();
 zustand();
 </script>

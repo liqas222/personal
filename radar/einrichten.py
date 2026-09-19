@@ -22,6 +22,8 @@ import json
 import os
 import sys
 
+from .modell import ALLE_KANTONE, DEUTSCHSPRACHIG
+
 PFAD = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                     "config.json")
 
@@ -36,6 +38,29 @@ def laden(pfad):
     return json.loads(text)
 
 
+def kantone_lesen(text):
+    """Eine Kantonsangabe zu einer Liste machen.
+
+    Erlaubt sind `deutsch`, `alle` und eine Komma-Liste von Kürzeln.
+    Ein Tippfehler wird abgewiesen statt stillschweigend übernommen: ein
+    Kanton, den es nicht gibt, filtert sonst einfach alles weg, und der
+    Radar meldet tagelang „nichts gefunden".
+    """
+    t = text.strip().lower()
+    if t in ("deutsch", "de", "deutschsprachig"):
+        return list(DEUTSCHSPRACHIG)
+    if t in ("alle", "all", "ch", ""):
+        return []          # leer heisst: nicht einschränken
+    kuerzel = [k.strip().upper() for k in text.split(",") if k.strip()]
+    unbekannt = [k for k in kuerzel if k not in ALLE_KANTONE]
+    if unbekannt:
+        raise ValueError(
+            "Unbekannte Kantone: %s\nErlaubt sind: %s — oder „deutsch\" "
+            "bzw. „alle\"." % (", ".join(unbekannt),
+                               ", ".join(sorted(ALLE_KANTONE))))
+    return kuerzel
+
+
 def zeigen(cfg):
     a = cfg.get("amtsblatt") or {}
     print("Datei:    %s%s" % (PFAD, "" if os.path.exists(PFAD)
@@ -44,8 +69,14 @@ def zeigen(cfg):
     print("Alle %s Stunden von selbst: %s"
           % (a.get("intervall_stunden", 12),
              "ja" if a.get("auto") else "nein — nur über „Jetzt abrufen\""))
-    print("Kantone:  %s" % (", ".join(a.get("kantone") or [])
-                            or "alle (nicht eingeschränkt)"))
+    k = a.get("kantone") or []
+    if not k:
+        wie = "alle 26 (nicht eingeschränkt)"
+    elif sorted(k) == sorted(DEUTSCHSPRACHIG):
+        wie = "alle deutschsprachigen (%d)" % len(k)
+    else:
+        wie = "%d: %s" % (len(k), ", ".join(k))
+    print("Kantone:  %s" % wie)
     print("Löschfrist: %s Tage" % cfg.get("loeschfrist_tage", 730))
 
 
@@ -56,8 +87,8 @@ def main(argv=None):
                    help="Abruf einschalten (und den Tageslauf dazu)")
     p.add_argument("--aus", action="store_true", help="Abruf abschalten")
     p.add_argument("--kantone",
-                   help="Komma-Liste, z. B. ZH,AG,ZG,SZ,SG,LU. "
-                        "Leer lassen heisst: alle Kantone.")
+                   help="deutsch (alle deutschsprachigen), alle, oder eine "
+                        "Komma-Liste wie ZH,AG,ZG,SZ,SG,LU")
     p.add_argument("--kein-auto", action="store_true",
                    help="Einschalten, aber nur auf Knopfdruck abrufen")
     p.add_argument("--loeschfrist", type=int,
@@ -87,8 +118,11 @@ def main(argv=None):
         amt["aktiv"] = False
         amt["auto"] = False
     if a.kantone is not None:
-        amt["kantone"] = [k.strip().upper() for k in a.kantone.split(",")
-                          if k.strip()]
+        try:
+            amt["kantone"] = kantone_lesen(a.kantone)
+        except ValueError as e:
+            print(e)
+            return 1
     cfg["amtsblatt"] = amt
     if a.loeschfrist is not None:
         cfg["loeschfrist_tage"] = a.loeschfrist

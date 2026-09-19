@@ -23,6 +23,22 @@ KANTONE = {
     "SG": "St. Gallen", "LU": "Luzern",
 }
 
+# Deutschsprachige Kantone. Bern und Graubünden sind mehrsprachig, haben
+# aber eine deutschsprachige Mehrheit und sind deshalb dabei. Freiburg und
+# Wallis sind zweisprachig mit französischer Mehrheit, Tessin italienisch,
+# die Romandie französisch — die bleiben draussen.
+#
+# WARUM DIE SPRACHE ÜBERHAUPT EINE ROLLE SPIELT: die Klassierung in
+# `klassierung.py` sucht nach deutschen Wörtern („Garage", „Transport",
+# „Schweissarbeiten"). Bei einer französischen oder italienischen Meldung
+# greift kein einziges davon — der Fall bekäme Score 0 und fiele still
+# durch, obwohl er vielleicht der beste des Tages wäre. Kantone, deren
+# Meldungen der Radar nicht lesen kann, aufzunehmen wäre also nicht
+# grosszügig, sondern irreführend.
+DEUTSCHSPRACHIG = ["AG", "AI", "AR", "BE", "BL", "BS", "GL", "GR", "LU",
+                   "NW", "OW", "SG", "SH", "SO", "SZ", "TG", "UR", "ZG",
+                   "ZH"]
+
 ALLE_KANTONE = {
     "AG": "Aargau", "AI": "Appenzell Innerrhoden", "AR": "Appenzell Ausserrhoden",
     "BE": "Bern", "BL": "Basel-Landschaft", "BS": "Basel-Stadt",

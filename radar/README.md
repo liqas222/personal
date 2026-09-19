@@ -19,7 +19,7 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 61 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 64 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
@@ -104,6 +104,32 @@ Vorname oder Geburtsdatum ohne UID. Übersprungene Publikationen werden
 **gezählt und protokolliert** — ein Lauf ohne Firmen ist damit ein
 Ergebnis und kein Fehlschlag.
 
+### Welche Kantone — und warum das an der Sprache hängt
+
+`--kantone deutsch` nimmt die 19 deutschsprachigen Kantone: AG, AI, AR,
+BE, BL, BS, GL, GR, LU, NW, OW, SG, SH, SO, SZ, TG, UR, ZG, ZH. Bern und
+Graubünden sind mehrsprachig, haben aber eine deutschsprachige Mehrheit.
+
+Die Sprache ist hier kein Randthema. Die Klassierung in `klassierung.py`
+sucht nach **deutschen Wörtern** — „Garage", „Transport",
+„Schweissarbeiten". Bei einer französischen oder italienischen Meldung
+greift kein einziges davon: der Fall bekäme Score 0 und fiele still
+durch, auch wenn er der beste des Tages wäre. Die Romandie und das Tessin
+aufzunehmen wäre also nicht grosszügig, sondern irreführend — sie
+erschienen als „nichts dabei".
+
+`--kantone alle` geht trotzdem, wenn du es willst. Dann stehen die
+welschen Fälle in der Liste, aber mit Branche „—" und niedrigem Score;
+die Vorauswahl trifft dann dein Auge, nicht der Radar.
+
+Ein Tippfehler wird abgewiesen statt übernommen: ein Kanton, den es nicht
+gibt, filtert sonst alles weg, und der Radar meldet tagelang „nichts
+gefunden".
+
+Die **Kantonsknöpfe in der Oberfläche** kommen aus den Daten — gezeigt
+wird, was tatsächlich erfasst ist. Vorher waren sie fest auf sechs
+verdrahtet; bei 19 Kantonen wäre der Rest nicht filterbar gewesen.
+
 ### Was fehlt: der Zweckartikel
 
 Die Konkurspublikationen enthalten **keinen Zweckartikel**. Der steht im
@@ -136,7 +162,7 @@ Liste zu liefern.
 ### Automatischer Lauf
 
 ```bash
-python3 -m radar.einrichten --an --kantone ZH,AG,ZG,SZ,SG,LU
+python3 -m radar.einrichten --an --kantone deutsch
 sudo systemctl restart atlas
 ```
 
@@ -150,7 +176,9 @@ eine Quelle, die heute nicht antwortet, antwortet morgen vielleicht.
 | `--an` | Abruf ein, Tageslauf dazu |
 | `--an --kein-auto` | Abruf ein, aber nur über „Jetzt abrufen" |
 | `--aus` | Abruf ab |
-| `--kantone ZH,SG` | auf diese Kantone beschränken (leer = alle) |
+| `--kantone deutsch` | alle 19 deutschsprachigen Kantone |
+| `--kantone alle` | keine Einschränkung, alle 26 |
+| `--kantone ZH,SG` | genau diese |
 | `--loeschfrist 730` | Tage bis unbearbeitete Fälle wegfallen (0 = nie) |
 
 Der Befehl **ergänzt** `radar/config.json` und überschreibt sie nicht;
@@ -333,7 +361,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            61 Tests, kein Netz nötig
+└── tests/            64 Tests, kein Netz nötig
 ```
 
 ### Tests

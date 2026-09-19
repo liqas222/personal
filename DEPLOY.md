@@ -69,9 +69,9 @@ zweiter Dienst, kein Eingriff in Tailscale. Nach dem Update ist er da.
 
 Der Radar kann die Meldungen selbst holen — aus dem **Amtsblattportal**
 (SHAB plus Kantonsblätter, offene Schnittstelle, kein Schlüssel). Der
-Adapter ist gegen einen nachgebauten Dienst geprüft, gegen den echten nie:
-aus der Entwicklungsumgebung ist `amtsblattportal.ch` gesperrt. Deshalb
-**zuerst** auf dem Server nachsehen, was wirklich zurückkommt:
+Adapter läuft gegen den echten Dienst — geprüft auf diesem Server, nicht
+in der Entwicklungsumgebung, wo `amtsblattportal.ch` gesperrt ist.
+Deshalb nach jedem Update nachsehen, was wirklich zurückkommt:
 
 ```bash
 cd /opt/atlas && python3 -m radar.pruefen
@@ -85,12 +85,19 @@ Feldnamen ab, steht es dort und lässt sich in `radar/config.json` bzw. in
 Erst wenn Schritt 4 „die Schnittstelle funktioniert" meldet, einschalten:
 
 ```bash
-cd /opt/atlas && python3 -m radar.einrichten --an --kantone ZH,AG,ZG,SZ,SG,LU && sudo systemctl restart atlas
+cd /opt/atlas && python3 -m radar.einrichten --an --kantone deutsch && sudo systemctl restart atlas
 ```
 
 Das ist ein Befehl, kein Textbaustein — bestehende Einträge in
 `radar/config.json` (Port, `auth_token`, eigene Adressen) bleiben
 erhalten, es wird nur ergänzt.
+
+`--kantone deutsch` nimmt die 19 deutschsprachigen Kantone. Das hat einen
+technischen Grund: die Klassierung sucht deutsche Wörter („Garage",
+„Transport") — bei einer französischen Meldung greift keines, der Fall
+bekäme Score 0 und fiele still durch. `--kantone alle` geht trotzdem,
+dann sortiert dein Auge statt des Radars. `--kantone ZH,SG` nimmt genau
+diese.
 
 Ohne Angabe läuft der Abruf alle 12 Stunden von selbst. Wer lieber nur auf
 Knopfdruck abruft, nimmt `--kein-auto`. Abschalten: `--aus`. Ohne jede
