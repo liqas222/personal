@@ -19,12 +19,12 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 51 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 53 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
-| **Live-Abruf Amtsblattportal** | Adapter fertig und gegen nachgebaute Dienste geprüft. Gegen den echten Dienst: Rubrikliste **antwortet**, Trefferliste wird **zugelassen**, liefert aber **null Einträge** — noch nicht gelöst, siehe unten |
+| **Live-Abruf Amtsblattportal** | Gegen den echten Dienst geprüft bis zur Trefferliste: sie **antwortet mit Publikationen**, und die werden gelesen. Der Detailabruf ist erst gegen einen Nachbau gelaufen — siehe unten |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
@@ -59,7 +59,7 @@ Dokumentation und aus quelloffenen Projekten, die diese Schnittstelle
 benutzen — das ist etwas anderes als ausgedacht, aber kein Ersatz für einen
 echten Lauf.
 
-**Was die echten Läufe ergeben haben** (Server, 2026-09-19):
+**Was die echten Läufe ergeben haben** (Server, 2026-09-19, drei Runden):
 
 * Die Schnittstelle existiert. `/rubrics` antwortet mit HTTP 200. Die
   Konkursrubriken gehen weiter als angenommen: **KK01 bis KK12**,
@@ -67,20 +67,22 @@ echten Lauf.
 * Die Trefferliste wird zugelassen, **sobald `publicationStates=PUBLISHED`
   mitgeschickt wird** — ohne diesen Parameter kommt HTTP 401. Das ist kein
   fehlendes Konto, sondern eine nicht zugelassene Abfrage. Der Parameter
-  ist jetzt Vorgabe. Auf `www.shab.ch` gilt dasselbe.
-* **Offen ist:** die zugelassene Abfrage antwortet mit **HTTP 200 und null
-  Einträgen**. Das kann zweierlei heissen, und die beiden sehen von aussen
-  gleich aus:
-  1. Die Antwort enthält Einträge, mein Leser findet sie nicht (anderer
-     Schlüssel als `content`).
-  2. Die Antwort ist wirklich leer — dann beantwortet das Portal anonyme
-     Trefferlisten nicht, und es braucht einen Zugang vom Betreiber.
+  ist jetzt Vorgabe. Für `www.shab.ch` gilt dasselbe.
+* Die Antwort ist `{content, pageRequest, total}`, und ein Eintrag darin
+  ist **verschachtelt**: die Kopfdaten liegen unter `meta`, der Titel ist
+  ein Objekt mit einem Eintrag je Sprache, der PDF-Link steht unter
+  `links.pdf` und ist relativ. Mein Leser sah nur flach nach, fand keine
+  `id`, warf jeden Eintrag weg — und der Dienst sah leer aus, obwohl er
+  fünf Publikationen geschickt hatte. Behoben: Einträge werden
+  flachgeklopft und über den vollen Pfad (`meta.id`) gesucht, der Titel
+  auf Deutsch genommen, der PDF-Link absolut gemacht. Zwei Tests halten
+  das fest.
 
-  Schritt 2 der Prüfung hält das jetzt auseinander: er zeigt je Abfrage
-  nebeneinander, wie viele Einträge **die Antwort** enthält und wie viele
-  **mein Leser** daraus macht, schaltet die Filter einzeln zu und nennt am
-  Ende den Befund beim Namen. Beide Fälle sind gegen nachgebaute Dienste
-  geprüft, ebenso der Normalfall.
+**Noch nicht gegen den echten Dienst geprüft** ist alles ab dem
+Detailabruf: ob `/publications/{id}/xml` die Felder so nennt, wie der
+Adapter sie sucht (Firmenname, UID, Sitz, Zweck, Konkursamt). Schritt 3
+der Prüfung listet die tatsächlichen Feldnamen auf — das ist die nächste
+offene Frage.
 
 **Deshalb zuerst das hier ausführen:**
 
@@ -286,7 +288,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            51 Tests, kein Netz nötig
+└── tests/            53 Tests, kein Netz nötig
 ```
 
 ### Tests

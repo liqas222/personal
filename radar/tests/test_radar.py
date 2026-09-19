@@ -439,6 +439,41 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         from radar.quellen.amtsblatt import AmtsblattQuelle
         self.assertEqual(AmtsblattQuelle({"zusatz_parameter": {}}).zusatz, {})
 
+    def test_verschachtelten_listeneintrag_lesen(self):
+        """Die echte Antwortform: Kopfdaten unter `meta`, Titel je Sprache.
+
+        Genau hier lag der Fehler — flach nachgesehen fand sich keine
+        `id`, jeder Eintrag flog raus, und der Dienst sah leer aus,
+        obwohl er fünf Publikationen geschickt hatte.
+        """
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        antwort = {"content": [{
+            "meta": {"id": "abc-123", "publicationDate": "2026-09-16",
+                     "rubric": "KK", "subRubric": "KK01",
+                     "cantons": ["ZH"],
+                     "title": {"de": "Konkurseröffnung", "fr": "Ouverture"},
+                     "publicationState": "PUBLISHED"},
+            "links": {"pdf": "/api/v1/publications/abc-123/pdf"}}],
+            "pageRequest": {"page": 0, "size": 5}, "total": 5}
+        k = AmtsblattQuelle({})._liste_lesen(
+            json.dumps(antwort).encode("utf-8"))
+        self.assertEqual(len(k), 1)
+        self.assertEqual(k[0]["id"], "abc-123")
+        self.assertEqual(k[0]["datum"], "2026-09-16")
+        # Deutscher Titel, nicht das ganze Sprachobjekt.
+        self.assertEqual(k[0]["titel"], "Konkurseröffnung")
+        # Unterrubrik, nicht die Oberrubrik.
+        self.assertEqual(k[0]["rubrik"], "KK01")
+        self.assertEqual(k[0]["kanton"], "ZH")
+
+    def test_relativer_pdf_link_wird_absolut(self):
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        q = AmtsblattQuelle({"basis_url": "https://amtsblattportal.ch/api/v1"})
+        self.assertEqual(q._absolut("/api/v1/publications/x/pdf"),
+                         "https://amtsblattportal.ch/api/v1/publications/x/pdf")
+        self.assertEqual(q._absolut("https://anderswo/x.pdf"),
+                         "https://anderswo/x.pdf")
+
     def test_401_meldung_nennt_den_ausweg(self):
         """Ein 401 darf nicht als „nichts gefunden" durchgehen."""
         import urllib.error

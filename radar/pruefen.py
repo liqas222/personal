@@ -224,6 +224,29 @@ def _struktur(roh):
                or "keine"), listen)
 
 
+def _erster_eintrag_zeigen(roh):
+    """Die Feldpfade des ersten Listeneintrags ausgeben.
+
+    Wenn der Leser nichts findet, obwohl Einträge da sind, ist das die
+    Antwort auf die Frage „wie heissen die Felder wirklich". Ohne diese
+    Ausgabe wäre die nächste Runde wieder Raten.
+    """
+    from .quellen.amtsblatt import _flach
+    try:
+        d = json.loads(roh.decode("utf-8", "replace"))
+    except ValueError:
+        return
+    if not isinstance(d, dict):
+        return
+    for schluessel, wert in d.items():
+        if isinstance(wert, list) and wert and isinstance(wert[0], dict):
+            print("          Felder des ersten Eintrags unter %s:"
+                  % schluessel)
+            for pfad, v in sorted(_flach(wert[0]).items())[:20]:
+                print("            %-32s %s" % (pfad, str(v)[:44]))
+            return
+
+
 def _variante_finden(basis, seit, bis):
     """Herausfinden, welche Abfrage der Dienst zulässt UND beantwortet.
 
@@ -263,6 +286,8 @@ def _variante_finden(basis, seit, bis):
             print("          gefundene Einträge: %d (mein Leser) | %s"
                   % (anzahl, ", ".join("%s=%d" % (p, c) for p, c in listen)
                      or "keine Liste in der Antwort"))
+            if host is None:
+                _erster_eintrag_zeigen(roh)
             if host is None:
                 host = h
         except urllib.error.HTTPError as e:

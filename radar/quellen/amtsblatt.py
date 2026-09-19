@@ -123,6 +123,31 @@ def _text(knoten, *namen):
     return None
 
 
+def _flach(d, praefix="", raus=None):
+    """Ein verschachteltes Objekt zu Pfad → Wert flachklopfen.
+
+    `{"meta": {"id": "x", "title": {"de": "..."}}}` wird zu
+    `{"meta.id": "x", "meta.title.de": "..."}`. Listen von Skalaren werden
+    mit Komma zusammengezogen (`cantons` ist mal ein Wort, mal eine
+    Liste); bei Listen von Objekten zählt der erste Eintrag, weil ein
+    Listeneintrag genau eine Publikation beschreibt.
+    """
+    if raus is None:
+        raus = {}
+    if isinstance(d, dict):
+        for k, v in d.items():
+            _flach(v, praefix + "." + k if praefix else k, raus)
+    elif isinstance(d, list):
+        skalare = [x for x in d if not isinstance(x, (dict, list))]
+        if skalare:
+            raus[praefix] = ", ".join(str(x) for x in skalare)
+        elif d:
+            _flach(d[0], praefix, raus)
+    elif d is not None and d != "":
+        raus[praefix] = d
+    return raus
+
+
 def _sammle_text(knoten):
     """Allen sichtbaren Text eines Knotens einsammeln."""
     teile = []
@@ -242,24 +267,59 @@ class AmtsblattQuelle(Quelle):
 
         Die Feldnamen sind nicht an einer Stelle festgelegt, also werden
         mehrere Schreibweisen akzeptiert. Was fehlt, bleibt leer.
+
+        WICHTIG — hier steckte ein Fehler: ein Listeneintrag ist nicht
+        flach. Die Kopfdaten liegen unter `meta`, und der Titel ist ein
+        Objekt mit einem Eintrag je Sprache. Flach nachgesehen fand sich
+        keine `id`, jeder Eintrag flog raus, und die Prüfung meldete
+        „5 Einträge in der Antwort, 0 gefunden". Deshalb wird der Eintrag
+        erst flachgeklopft und dann sowohl über den vollen Pfad
+        (`meta.id`) als auch über den blossen Feldnamen (`id`) gesucht.
         """
+        flach = _flach(e)
+
         def erst(*namen):
             for n in namen:
-                v = e.get(n)
-                if isinstance(v, dict):
-                    v = v.get("id") or v.get("code") or v.get("name")
-                if v:
-                    return str(v)
+                if n in flach:
+                    return str(flach[n])
+            # Nicht über den vollen Pfad gefunden: über den letzten
+            # Namensteil suchen, damit auch eine unerwartete
+            # Verschachtelung noch greift.
+            for n in namen:
+                for pfad, wert in flach.items():
+                    if pfad.split(".")[-1] == n:
+                        return str(wert)
             return None
 
         return {
-            "id": erst("id", "publicationId", "uuid"),
-            "titel": erst("title", "titel", "name"),
-            "datum": erst("publicationDate", "publicationDateTime", "date"),
-            "rubrik": erst("subRubric", "subRubrics", "rubric", "rubrics"),
-            "kanton": erst("cantons", "canton", "tenant"),
-            "pdf": erst("pdfUrl", "pdf"),
+            # Volle Pfade zuerst: `meta.id` ist die Id der Publikation,
+            # ein blosses `id` kann irgendwo tiefer auch die Id der
+            # Rubrik sein.
+            "id": erst("meta.id", "id", "publicationId", "uuid"),
+            "titel": erst("meta.title.de", "title.de", "meta.title",
+                          "title", "titel", "name"),
+            "datum": erst("meta.publicationDate", "publicationDate",
+                          "publicationDateTime", "date"),
+            "rubrik": erst("meta.subRubric", "subRubric", "subRubrics",
+                           "meta.rubric", "rubric", "rubrics"),
+            "kanton": erst("meta.cantons", "cantons", "canton",
+                           "meta.tenant", "tenant"),
+            "pdf": erst("meta.pdfUrl", "pdfUrl", "pdf"),
         }
+
+    def _absolut(self, url):
+        """Einen relativen Link auf den Dienst beziehen.
+
+        Die Antwort liefert `links.pdf` als `/api/v1/publications/…/pdf`.
+        Gespeichert gehört die vollständige Adresse — ein relativer Link
+        in der Oberfläche führt ins Leere.
+        """
+        if not url or "://" in url:
+            return url
+        teile = urllib.parse.urlsplit(self.basis)
+        return urllib.parse.urlunsplit(
+            (teile.scheme, teile.netloc, url if url.startswith("/")
+             else teile.path.rstrip("/") + "/" + url, "", ""))
 
     # -- Detail -----------------------------------------------------------
 
@@ -338,7 +398,7 @@ class AmtsblattQuelle(Quelle):
                 "meldungsart": k.get("titel") or k.get("rubrik"),
                 "kanton": k.get("kanton"),
                 "aktenzeichen": k.get("id"),
-                "quelle_url": k.get("pdf") or
+                "quelle_url": self._absolut(k.get("pdf")) or
                               "%s/publications/%s/pdf" % (self.basis, k["id"]),
                 "quelle": "Amtsblattportal",
             }
