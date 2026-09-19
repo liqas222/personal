@@ -323,9 +323,12 @@ async function zustand() {
     esc(q.hinweis) + '">' + q.name + (q.bereit ? " ✓" : " ✕") + "</span>"
   ).join(" · ");
   const l = d.letzter_lauf;
+  // Die Bemerkung erklärt ein Ergebnis, das sonst rätselhaft wäre —
+  // vor allem „0 gelesen". Ohne sie ist nicht zu unterscheiden, ob es
+  // nichts zu holen gab oder ob etwas nicht stimmt.
   $("fLauf").textContent = l
     ? (l.beendet || "").replace("T", " ") + " · " + l.gelesen + " gelesen, " +
-      l.neu + " neu"
+      l.neu + " neu" + (l.bemerkung ? " — " + l.bemerkung : "")
     : "noch keiner";
   $("stand").textContent = d.zahlen.gesamt + " Fälle erfasst";
 }
@@ -341,7 +344,7 @@ $("abrufen").onclick = async () => {
     $("importMeldung").textContent = d.fehler
       ? "Abruf fehlgeschlagen: " + d.fehler
       : d.gelesen + " gelesen · " + d.neu + " neu · " + d.aktualisiert +
-        " aktualisiert";
+        " aktualisiert" + (d.bemerkung ? " — " + d.bemerkung : "");
     if (d.protokoll) console.log(d.protokoll.join("\n"));
   } catch (e) {
     $("importMeldung").textContent = "Fehler: " + e.message;

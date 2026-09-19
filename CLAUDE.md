@@ -74,6 +74,16 @@ Protokoll.
   Publikationen ohne auswertbare Firmendaten sind ein Fehler, kein
   Ergebnis — sonst liest sich eine kaputte Feldzuordnung als „heute nichts
   gefunden".
+- **„0 gelesen" braucht einen Grund.** Die letzte Protokollzeile des
+  Adapters (Sätze, übersprungene Personen, fehlgeschlagene Details) wird
+  als `bemerkung` im Laufprotokoll gespeichert und in der Fusszeile
+  gezeigt. Ohne sie ist nicht zu unterscheiden, ob es nichts zu holen
+  gab, ob alles Privatpersonen waren oder ob die Feldzuordnung klemmt.
+  Eine Erklärung, die nur in der Browser-Konsole steht, hilft niemandem.
+- **Neue Spalten nachrüsten, nicht die Datenbank wegwerfen.**
+  `CREATE TABLE IF NOT EXISTS` ändert eine vorhandene Tabelle nicht —
+  `Speicher._nachruesten()` ergänzt fehlende Spalten per ALTER TABLE. An
+  einer bestehenden Datenbank hängt Arbeit.
 - **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
   unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
 

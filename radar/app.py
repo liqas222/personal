@@ -333,9 +333,15 @@ def abrufen():
         sp.lauf_beenden(lauf, 0, 0, 0, 0, text)
         return {"fehler": text, "protokoll": q.protokoll}
     bericht = kette.verarbeiten(roh, sp)
+    # Die letzte Protokollzeile nennt Sätze, übersprungene Personen und
+    # fehlgeschlagene Details. Sie wird mitgespeichert, damit „0 gelesen"
+    # in der Fusszeile einen Grund hat.
+    bemerkung = q.protokoll[-1] if q.protokoll else None
     sp.lauf_beenden(lauf, bericht["gelesen"], bericht["neu"],
-                    bericht["aktualisiert"], bericht["verworfen"])
+                    bericht["aktualisiert"], bericht["verworfen"],
+                    bemerkung=bemerkung)
     bericht["protokoll"] = q.protokoll
+    bericht["bemerkung"] = bemerkung
     aufraeumen()
     return bericht
 

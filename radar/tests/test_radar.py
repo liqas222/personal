@@ -533,6 +533,37 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         self.assertIn("1 natürliche Personen übersprungen",
                       " ".join(q.protokoll))
 
+    def test_alte_datenbank_bekommt_die_neue_spalte(self):
+        """Eine bestehende Datenbank darf nicht weggeworfen werden.
+
+        `CREATE TABLE IF NOT EXISTS` ändert eine vorhandene Tabelle nicht.
+        Ohne Nachrüsten stürbe die Abfrage mit „no such column".
+        """
+        import sqlite3
+        with tempfile.TemporaryDirectory() as ordner:
+            pfad = os.path.join(ordner, "radar.db")
+            db = sqlite3.connect(pfad)
+            db.executescript(
+                "CREATE TABLE laeufe (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                " quelle TEXT, begonnen TEXT, beendet TEXT,"
+                " gelesen INTEGER DEFAULT 0, neu INTEGER DEFAULT 0,"
+                " aktualisiert INTEGER DEFAULT 0,"
+                " verworfen INTEGER DEFAULT 0, fehler TEXT);"
+                "INSERT INTO laeufe (quelle, begonnen, beendet, gelesen)"
+                " VALUES ('alt','a','b',7);")
+            db.commit()
+            db.close()
+
+            sp = Speicher(pfad)
+            lauf = sp.lauf_beginnen("Amtsblattportal")
+            sp.lauf_beenden(lauf, 0, 0, 0, 0,
+                            bemerkung="5 natürliche Personen übersprungen")
+            self.assertTrue(any(l["quelle"] == "alt" and l["gelesen"] == 7
+                                for l in sp.laeufe()))
+            self.assertIn("übersprungen",
+                          sp.letzter_lauf("Amtsblattportal")["bemerkung"])
+            sp.schliessen()
+
     def test_einrichten_erhaelt_bestehende_einstellungen(self):
         """Einschalten darf nichts wegwerfen — auch nicht den auth_token."""
         from radar import einrichten

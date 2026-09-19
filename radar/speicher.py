@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS laeufe (
     neu         INTEGER DEFAULT 0,
     aktualisiert INTEGER DEFAULT 0,
     verworfen   INTEGER DEFAULT 0,
-    fehler      TEXT
+    fehler      TEXT,
+    bemerkung   TEXT
 );
 """
 
@@ -83,8 +84,23 @@ class Speicher:
         self.db = sqlite3.connect(pfad, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        self._nachruesten()
         self.db.commit()
         self.neu_angelegt = neu
+
+    def _nachruesten(self):
+        """Spalten ergänzen, die es in älteren Datenbanken noch nicht gibt.
+
+        `CREATE TABLE IF NOT EXISTS` ändert eine vorhandene Tabelle nicht.
+        Ohne das hier bekäme eine Datenbank, die schon Fälle enthält, die
+        neue Spalte nie — und die Abfrage stürbe mit „no such column".
+        Eine bestehende Datenbank wegzuwerfen ist keine Option: daran
+        hängt Arbeit.
+        """
+        vorhanden = {r["name"] for r in
+                     self.db.execute("PRAGMA table_info(laeufe)")}
+        if "bemerkung" not in vorhanden:
+            self.db.execute("ALTER TABLE laeufe ADD COLUMN bemerkung TEXT")
 
     def schliessen(self):
         self.db.close()
@@ -251,12 +267,20 @@ class Speicher:
         return c.lastrowid
 
     def lauf_beenden(self, lauf_id, gelesen, neu, aktualisiert, verworfen,
-                     fehler=None):
+                     fehler=None, bemerkung=None):
+        """`bemerkung` erklärt ein Ergebnis, das sonst rätselhaft wäre.
+
+        „0 gelesen" ohne Grund ist die nutzloseste Meldung überhaupt: es
+        kann heissen, dass nichts da war, dass alles Privatpersonen waren
+        oder dass die Feldzuordnung nicht passt. Der Unterschied gehört in
+        die Oberfläche, nicht in die Serverkonsole.
+        """
         self.db.execute(
             "UPDATE laeufe SET beendet = ?, gelesen = ?, neu = ?, "
-            "aktualisiert = ?, verworfen = ?, fehler = ? WHERE id = ?",
+            "aktualisiert = ?, verworfen = ?, fehler = ?, bemerkung = ? "
+            "WHERE id = ?",
             (jetzt(), gelesen, neu, aktualisiert, verworfen,
-             fehler, lauf_id))
+             fehler, bemerkung, lauf_id))
         self.db.commit()
 
     def letzter_lauf(self, quelle=None):
