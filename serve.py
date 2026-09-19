@@ -185,6 +185,15 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
+    # Der Radar darf nach draussen — aber nur, wenn er dafür eingerichtet
+    # ist. Ohne Konfiguration passiert hier nichts.
+    if radar_app is not None:
+        try:
+            if radar_app.auto_schleife():
+                print("Radar: automatischer Abruf eingeschaltet.")
+        except Exception:
+            traceback.print_exc()
+
     handler = partial(Handler, directory=STATIC)
     srv = ThreadingHTTPServer((CFG["host"], int(CFG["port"])), handler)
     schutz = "mit Passwort" if CFG.get("auth_token") else "OHNE Passwort"

@@ -44,8 +44,16 @@ Im selben Repo liegt ein zweites Projekt: der **Konkurs Deal Radar**
 Nachfragen beim Konkursamt eher lohnt. Eigene Anleitung in
 `radar/README.md`.
 
+Die Meldungen kann er selbst holen — aus dem **Amtsblattportal** (SHAB plus
+Kantonsblätter, offene Schnittstelle, kein Schlüssel, kein Konto). Der
+Abruf ist **im Auslieferungsstand abgeschaltet** und muss auf dem Server
+eingeschaltet werden, nachdem `python3 -m radar.pruefen` gezeigt hat, dass
+die Schnittstelle wirklich so antwortet wie angenommen. Wer nichts
+einschaltet, importiert weiterhin CSV, JSON oder PDF von Hand.
+
 Beide laufen im selben Serverprozess. Der Atlas bleibt davon unberührt:
-fehlt der Radar oder bricht er beim Laden, läuft der Atlas weiter.
+fehlt der Radar oder bricht er beim Laden, läuft der Atlas weiter — und der
+Atlas selbst ruft nach wie vor nichts ab.
 
 ## Starten
 

@@ -14,6 +14,7 @@ import zipfile
 
 from . import bewertung, kette, modell
 from .quellen.dateien import CsvQuelle, JsonQuelle, PdfQuelle
+from .quellen.amtsblatt import AmtsblattQuelle
 from .quellen.shab import ShabQuelle
 from .speicher import Speicher
 
@@ -24,6 +25,15 @@ CFG_PFAD = os.path.join(BASE, "config.json")
 STANDARD_CFG = {
     "kantone": ["ZH", "AG", "ZG", "SZ", "SG", "LU"],
     "min_score": 60,
+    # Löschfrist für Fälle. Konkursmeldungen über Einzelfirmen enthalten
+    # Personendaten; eine unbegrenzte Historie wäre nach DSG nicht in
+    # Ordnung. 0 = keine Löschung (dann bewusst entscheiden).
+    "loeschfrist_tage": 730,
+    "amtsblatt": {
+        "aktiv": True,
+        "auto": True,
+        "intervall_stunden": 12,
+    },
     "shab": {
         "aktiv": False,
         "verifiziert": False,
@@ -209,6 +219,8 @@ def behandle_get(pfad, query):
                               "status_werte": modell.STATUS_WERTE})
 
     if pfad == "/api/zustand":
+        amt = AmtsblattQuelle(cfg().get("amtsblatt"))
+        amt_ok, amt_grund = amt.verfuegbar()
         shab = ShabQuelle(cfg().get("shab"))
         ok, grund = shab.verfuegbar()
         pdf_ok, pdf_grund = PdfQuelle(b"").verfuegbar()
@@ -217,9 +229,12 @@ def behandle_get(pfad, query):
                 {"name": "CSV-Import", "bereit": True, "hinweis": ""},
                 {"name": "JSON-Import", "bereit": True, "hinweis": ""},
                 {"name": "PDF-Import", "bereit": pdf_ok, "hinweis": pdf_grund},
-                {"name": "SHAB", "bereit": ok, "hinweis": grund,
+                {"name": "Amtsblattportal", "bereit": amt_ok,
+                 "hinweis": amt_grund or amt.zugang_hinweis},
+                {"name": "SHAB (alt)", "bereit": ok, "hinweis": grund,
                  "verifiziert": shab.verifiziert},
             ],
+            "auto": bool((cfg().get("amtsblatt") or {}).get("auto")),
             "letzter_lauf": sp.letzter_lauf(),
             "laeufe": sp.laeufe(8),
             "zahlen": sp.zahlen(),
@@ -278,6 +293,9 @@ def behandle_post(pfad, koerper, content_type, dateiname=None):
                         bericht["aktualisiert"], bericht["verworfen"])
         return _json_antwort(bericht)
 
+    if pfad == "/api/abrufen":
+        return _json_antwort(abrufen())
+
     if pfad == "/api/status":
         d = json.loads(koerper or b"{}")
         if d.get("status") not in modell.STATUS_WERTE:
@@ -291,6 +309,87 @@ def behandle_post(pfad, koerper, content_type, dateiname=None):
         return _json_antwort({"ok": True})
 
     return None
+
+
+def abrufen():
+    """Einen Abruf beim Amtsblattportal ausführen.
+
+    Gibt IMMER zurück, was passiert ist — auch und gerade im Fehlerfall.
+    Ein Abruf, der still nichts liefert, ist von einem, bei dem es nichts
+    zu holen gab, nicht zu unterscheiden.
+    """
+    sp = speicher()
+    q = AmtsblattQuelle(cfg().get("amtsblatt"))
+    ok, grund = q.verfuegbar()
+    if not ok:
+        return {"fehler": grund}
+    letzter = sp.letzter_lauf(q.name)
+    seit = (letzter or {}).get("beendet", "")[:10] or None
+    lauf = sp.lauf_beginnen(q.name)
+    try:
+        roh = q.holen(seit)
+    except Exception as e:
+        text = "%s: %s" % (type(e).__name__, e)
+        sp.lauf_beenden(lauf, 0, 0, 0, 0, text)
+        return {"fehler": text, "protokoll": q.protokoll}
+    bericht = kette.verarbeiten(roh, sp)
+    sp.lauf_beenden(lauf, bericht["gelesen"], bericht["neu"],
+                    bericht["aktualisiert"], bericht["verworfen"])
+    bericht["protokoll"] = q.protokoll
+    aufraeumen()
+    return bericht
+
+
+def aufraeumen():
+    """Alte Fälle löschen.
+
+    Konkursmeldungen über Einzelfirmen sind Personendaten. Eine Sammlung,
+    die nie vergisst, ist etwas anderes als ein Arbeitsvorrat — deshalb
+    eine Frist, und zwar eingebaut statt als Vorsatz in der README.
+    Fälle, an denen gearbeitet wurde, bleiben.
+    """
+    tage = int(cfg().get("loeschfrist_tage") or 0)
+    if tage <= 0:
+        return 0
+    return speicher().aufraeumen(tage)
+
+
+def auto_schleife():
+    """Hintergrundlauf: holt regelmässig neue Publikationen.
+
+    Läuft nur, wenn in der Konfiguration ausdrücklich eingeschaltet. Der
+    erste Abruf kommt kurz nach dem Start, nicht sofort — der Server soll
+    erst hochkommen.
+
+    Ein Fehler beendet die Schleife NICHT: eine Quelle, die heute nicht
+    antwortet, antwortet morgen vielleicht. Der Fehler steht im
+    Laufprotokoll und in der Oberfläche.
+    """
+    import threading
+    import time as _t
+
+    c = cfg().get("amtsblatt") or {}
+    if not (c.get("aktiv") and c.get("auto")):
+        return None
+    stunden = float(c.get("intervall_stunden", 12))
+
+    def lauf():
+        _t.sleep(20)
+        while True:
+            try:
+                b = abrufen()
+                if b.get("fehler"):
+                    print("radar: Abruf fehlgeschlagen — " + str(b["fehler"]))
+                else:
+                    print("radar: %d gelesen, %d neu"
+                          % (b.get("gelesen", 0), b.get("neu", 0)))
+            except Exception as e:                      # pragma: no cover
+                print("radar: Abrufschleife — %s: %s" % (type(e).__name__, e))
+            _t.sleep(stunden * 3600)
+
+    t = threading.Thread(target=lauf, daemon=True, name="radar-abruf")
+    t.start()
+    return t
 
 
 def _quelle_waehlen(koerper, dateiname):

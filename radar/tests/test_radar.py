@@ -7,6 +7,7 @@ Kein Netz, keine Fremdbibliothek. Was hier grün ist, ist grün — nicht
 "grün, solange eine Schnittstelle antwortet".
 """
 import datetime
+import json
 import os
 import sys
 import tempfile
@@ -324,6 +325,89 @@ class TestSpeicher(unittest.TestCase):
         import zipfile as _z, io as _io
         with _z.ZipFile(_io.BytesIO(xlsx)) as z:
             self.assertIn("xl/worksheets/sheet1.xml", z.namelist())
+
+
+
+
+class TestAmtsblatt(unittest.TestCase):
+    """Der Adapter selbst — ohne Netz, auf gespeicherten Antworten."""
+
+    def setUp(self):
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        self.Q = AmtsblattQuelle
+
+    def test_ist_standardmaessig_an(self):
+        ok, grund = self.Q({}).verfuegbar()
+        self.assertTrue(ok, grund)
+
+    def test_laesst_sich_abschalten(self):
+        ok, grund = self.Q({"aktiv": False}).verfuegbar()
+        self.assertFalse(ok)
+
+    def test_liste_json_lesen(self):
+        roh = json.dumps({"content": [
+            {"id": "abc-123", "title": "Konkurseröffnung",
+             "publicationDate": "2026-09-15", "subRubric": "KK01",
+             "cantons": "SG"}]}).encode("utf-8")
+        k = self.Q({})._liste_lesen(roh)
+        self.assertEqual(k[0]["id"], "abc-123")
+        self.assertEqual(k[0]["datum"], "2026-09-15")
+        self.assertEqual(k[0]["rubrik"], "KK01")
+
+    def test_liste_xml_lesen(self):
+        roh = ("<publications><publication><id>x-9</id>"
+               "<title>Kollokationsplan</title>"
+               "<publicationDate>2026-09-14</publicationDate>"
+               "</publication></publications>").encode("utf-8")
+        k = self.Q({})._liste_lesen(roh)
+        self.assertEqual(k[0]["id"], "x-9")
+
+    def test_eintrag_ohne_id_faellt_weg(self):
+        roh = json.dumps({"content": [{"title": "ohne id"}]}).encode("utf-8")
+        self.assertEqual(self.Q({})._liste_lesen(roh), [])
+
+    def test_detailfelder_aus_xml(self):
+        from radar.quellen.amtsblatt import _text, _sammle_text
+        import xml.etree.ElementTree as ET
+        w = ET.fromstring(
+            "<pub><debtor><name>Muster Bau AG</name>"
+            "<uid>CHE-113.766.916</uid><town>Andwil</town></debtor>"
+            "<office><officeName>Konkursamt SG</officeName></office>"
+            "<content>Kollokationsplan und Inventar aufgelegt.</content></pub>")
+        self.assertEqual(_text(w, "name", "companyName"), "Muster Bau AG")
+        self.assertEqual(_text(w, "uid"), "CHE-113.766.916")
+        self.assertEqual(_text(w, "officeName", "office"), "Konkursamt SG")
+        self.assertIn("Kollokationsplan", _sammle_text(w))
+
+    def test_fehlendes_feld_gibt_none_statt_unsinn(self):
+        from radar.quellen.amtsblatt import _text
+        import xml.etree.ElementTree as ET
+        w = ET.fromstring("<pub><a>x</a></pub>")
+        self.assertIsNone(_text(w, "name", "companyName"))
+
+
+class TestLoeschfrist(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.sp = Speicher(os.path.join(self.tmp, "t.db"))
+        with open(BEISPIEL, "rb") as f:
+            kette.verarbeiten(CsvQuelle(f.read()).holen(), self.sp, STICHTAG)
+
+    def tearDown(self):
+        self.sp.schliessen()
+
+    def test_alte_faelle_verschwinden(self):
+        vorher = len(self.sp.suchen(min_score=0))
+        self.assertEqual(self.sp.aufraeumen(100000), 0)   # nichts so alt
+        self.assertEqual(self.sp.aufraeumen(1), vorher)   # alles älter als 1 Tag
+        self.assertEqual(len(self.sp.suchen(min_score=0)), 0)
+
+    def test_bearbeitete_faelle_bleiben(self):
+        f = self.sp.suchen(min_score=0)[0]
+        self.sp.status_setzen(f["id"], "Inventarliste angefragt")
+        self.sp.aufraeumen(1)
+        self.assertIsNotNone(self.sp.holen(f["id"]))
 
 
 if __name__ == "__main__":

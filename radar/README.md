@@ -19,45 +19,86 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 38 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 47 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
-| **SHAB-Live-Abruf** | **NICHT VERIFIZIERT — siehe unten** |
+| **Live-Abruf Amtsblattportal** | Adapter **fertig und gegen einen nachgebauten Dienst geprüft**, gegen den echten nie gelaufen — siehe unten |
+| Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
+| Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
 
-### SHAB: warum nicht verifiziert
+### Live-Abruf: was geprüft ist und was nicht
 
-Der Adapter in `quellen/shab.py` ist nie gegen den echten Dienst gelaufen.
-In der Umgebung, in der er entstand, sind `shab.ch`, `zefix.admin.ch`,
-`opendata.swiss`, `egant.ch` und die kantonalen Amtsblätter von der
-Netzrichtlinie gesperrt (403 beim Verbindungsaufbau). Adresse, Feldnamen
-und Antwortformat sind deshalb **Annahmen**, keine Messung.
+Die Daten kommen von **`amtsblattportal.ch/api/v1`** — dem gemeinsamen
+Portal für das SHAB *und* die angeschlossenen kantonalen Amtsblätter. Damit
+sind die Quellen 1 und 2 in einer offenen, strukturierten Schnittstelle
+abgedeckt. Kein Schlüssel, kein Konto, kein HTML-Scraping.
 
-Er meldet sich in der Oberfläche als „nicht bereit" und verweigert den
-Dienst, statt eine leere Liste zurückzugeben — ein nicht eingerichteter
-Adapter darf nicht so tun, als habe er nachgesehen und nichts gefunden.
+```
+/api/v1/publications              Trefferliste
+/api/v1/publications/{id}/xml     Volltext einer Publikation
+/api/v1/publications/{id}/pdf     PDF
+/api/v1/rubrics                   Rubrikcodes
+```
 
-Vor dem Scharfschalten sind drei Dinge zu klären, und zwar in dieser
-Reihenfolge:
+Rubriken: **KK01** Konkurseröffnung, **KK02** Schuldenruf, **KK03**
+Kollokationsplan und Inventar, dazu die SB-Rubriken für Steigerungen.
 
-1. **Nutzungsbedingungen von shab.ch lesen.** Ob und wie automatisiert
-   abgerufen werden darf, steht dort.
-2. **Schnittstelle bestimmen.** Gibt es einen offiziellen, freien
-   strukturierten Zugang? Falls nur kommerzielle Anbieter in Frage kommen,
-   ist das eine Kostenentscheidung. Der Adapter nimmt über `basis_url` und
-   `kopfzeilen` auch einen solchen Dienst auf.
-3. **Mit einer gespeicherten Antwort testen.** `ShabQuelle.antwort_lesen()`
-   arbeitet auf Text und braucht kein Netz — damit lässt sich das Format
-   prüfen, bevor der erste echte Abruf läuft.
+**Geprüft ist:** der Adapter selbst. Er wurde gegen einen nachgebauten
+Dienst laufen gelassen, der antwortet, wie die Dokumentation es beschreibt
+— Paginierung, Detailabruf, Feldzuordnung, Bewertung, Duplikaterkennung.
+Auch jeder Fehlerweg ist geprüft: falsche Adresse, Dienst nicht erreichbar,
+Detail-XML mit unerwarteten Feldnamen.
 
-Erst danach in `radar/config.json` `"aktiv": true` und `"verifiziert": true`
-setzen.
+**Nicht geprüft ist:** ob der echte Dienst genauso antwortet. Aus der
+Entwicklungsumgebung ist `amtsblattportal.ch` von der Netzrichtlinie
+gesperrt. Adresse, Parameter und Rubrikcodes stammen aus öffentlicher
+Dokumentation und aus quelloffenen Projekten, die diese Schnittstelle
+benutzen — das ist etwas anderes als ausgedacht, aber kein Ersatz für einen
+echten Lauf.
 
-**Kein HTML-Scraping.** Der Adapter spricht nur strukturierte Formate an.
-Eine Lösung, die HTML-Seiten auseinandernimmt, wäre fragil und rechtlich
-heikel; die wird hier bewusst nicht gebaut.
+**Deshalb zuerst das hier ausführen:**
+
+```bash
+python3 -m radar.pruefen
+```
+
+Das klopft die Schnittstelle in vier Schritten ab und schreibt auf, was
+zurückkommt: Rubrikcodes, Trefferliste, die tatsächlichen Feldnamen im
+Detail-XML und ein vollständiger Adapterlauf. Weicht etwas ab, steht genau
+da, was in `radar/config.json` zu ändern ist. Es schreibt nichts in die
+Datenbank.
+
+Wenn etwas beim laufenden Betrieb schiefgeht, steht der Grund in der
+Oberfläche unter „Letzter Lauf" und im Serverprotokoll. Ein Abruf, der
+nichts findet, ist im Protokoll von einem unterscheidbar, der gescheitert
+ist — genau dafür bricht der Adapter mit Fehlermeldung ab, statt eine leere
+Liste zu liefern.
+
+### Automatischer Lauf
+
+Eingeschaltet in `radar/config.json`:
+
+```json
+"amtsblatt": { "aktiv": true, "auto": true, "intervall_stunden": 12 }
+```
+
+Der Serverprozess holt dann alle zwölf Stunden die neuen Publikationen seit
+dem letzten erfolgreichen Lauf. Ein Fehler beendet die Schleife nicht —
+eine Quelle, die heute nicht antwortet, antwortet morgen vielleicht.
+
+Wer lieber cron benutzt, setzt `"auto": false` und nimmt
+`python3 -m radar.lauf --shab`.
+
+### Nutzungsbedingungen
+
+Amtliche Publikationen sind öffentlich. Ob und in welchem Umfang
+automatisiert abgerufen werden darf, steht in den Bedingungen des Portals.
+Der Adapter hält sich an bescheidene Grenzen — Pause zwischen Anfragen,
+Obergrenze je Lauf, erkennbarer User-Agent mit Zweckangabe — aber die
+Entscheidung liegt beim Betreiber.
 
 ---
 
@@ -162,9 +203,15 @@ hängen automatisch an jedem betroffenen Fall.
 Dritter sind der Normalfall, nicht die Ausnahme. Steht bei jedem Fall dabei.
 
 **Personendaten.** Meldungen über Einzelfirmen enthalten Personennamen. Das
-ist Bearbeitung von Personendaten nach DSG. Die Datenbank hat derzeit
-**keine automatische Löschfrist** — wer den Radar dauerhaft betreibt,
-sollte eine festlegen.
+ist Bearbeitung von Personendaten nach DSG — und die Konkursrubriken sind
+genau die, die ein anderes quelloffenes Projekt für dieselbe Schnittstelle
+aus Datenschutzgründen bewusst aussperrt.
+
+Hier werden sie gebraucht, deshalb mit **Löschfrist**: `loeschfrist_tage`
+in `radar/config.json`, voreingestellt 730 Tage. Nach jedem Abruf werden
+ältere Fälle gelöscht — ausser solchen, an denen gearbeitet wurde
+(Status „Inventarliste angefragt", „Besichtigung", „Kontakt empfohlen").
+`0` schaltet die Löschung ab; dann ist es eine bewusste Entscheidung.
 
 ---
 
@@ -216,7 +263,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            38 Tests, kein Netz nötig
+└── tests/            47 Tests, kein Netz nötig
 ```
 
 ### Tests

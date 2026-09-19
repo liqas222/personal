@@ -65,9 +65,39 @@ Dann die URL im Browser öffnen. Benutzername ist egal, Passwort ist der
 Läuft im selben Dienst mit, unter `/radar/`. Kein zweiter Port, kein
 zweiter Dienst, kein Eingriff in Tailscale. Nach dem Update ist er da.
 
-Der SHAB-Adapter ist abgeschaltet und nicht verifiziert — er muss auf dem
-Server eingerichtet werden, bevor irgendetwas abgerufen wird. Siehe
-`radar/README.md`. Für den PDF-Import:
+### Live-Abruf: erst prüfen, dann einschalten
+
+Der Radar kann die Meldungen selbst holen — aus dem **Amtsblattportal**
+(SHAB plus Kantonsblätter, offene Schnittstelle, kein Schlüssel). Der
+Adapter ist gegen einen nachgebauten Dienst geprüft, gegen den echten nie:
+aus der Entwicklungsumgebung ist `amtsblattportal.ch` gesperrt. Deshalb
+**zuerst** auf dem Server nachsehen, was wirklich zurückkommt:
+
+```bash
+cd /opt/atlas && python3 -m radar.pruefen
+```
+
+Das ändert nichts, es liest nur. Vier Schritte: Rubrikliste, Trefferliste,
+Detail-XML mit Feldnamen, voller Adapterlauf. Weichen Rubrikcodes oder
+Feldnamen ab, steht es dort und lässt sich in `radar/config.json` bzw. in
+`radar/quellen/amtsblatt.py` nachziehen.
+
+Erst wenn Schritt 4 „die Schnittstelle funktioniert" meldet, einschalten —
+in `/opt/atlas/radar/config.json`:
+
+```json
+"amtsblatt": { "aktiv": true, "auto": true, "kantone": ["ZH","AG","ZG","SZ","SG","LU"] },
+"loeschfrist_tage": 730
+```
+
+`auto` lässt alle 12 Stunden einen Lauf mitlaufen; ohne `auto` wird nur
+abgerufen, wenn im Radar „Jetzt abrufen" gedrückt wird. `loeschfrist_tage`
+räumt unbearbeitete Fälle nach dieser Frist weg — bearbeitete bleiben.
+
+Nach dem Ändern der Konfiguration: `sudo systemctl restart atlas`.
+
+Der alte SHAB-Adapter bleibt abgeschaltet und unverifiziert; er wird nicht
+gebraucht. Für den PDF-Import:
 
 ```bash
 sudo pip3 install pypdf     # optional, nur für PDF
@@ -82,8 +112,10 @@ cp /opt/atlas/radar/daten/radar.db ~/radar-backup-$(date +%F).db
 
 ## Der Server ruft nichts mehr ab
 
-Seit dem Umbau zum Quiz liefert `serve.py` nur noch Dateien aus: kein
-Telegram, keine Feeds, keine Live-Abrufe, keine Hintergrundschleifen. In
+Seit dem Umbau zum Quiz liefert `serve.py` für den **Atlas** nur noch
+Dateien aus: kein Telegram, keine Feeds, keine Hintergrundschleifen. Die
+einzige Ausnahme ist der Amtsblatt-Abruf des Radars, und der ist
+ausgeschaltet, bis er in `radar/config.json` eingeschaltet wird. In
 `config.json` zählt nur noch `host`, `port` und `auth_token`. Alte Einträge
 wie `tg_token` oder `web_quellen` schaden nicht, werden aber ignoriert.
 

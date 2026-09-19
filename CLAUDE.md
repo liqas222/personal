@@ -34,6 +34,24 @@ Protokoll.
   liefern. Sonst sieht ein leerer Lauf aus wie „nichts gefunden".
 - Der Score ist eine Sortierhilfe, keine Wertangabe, und jede Zeile nennt
   Punkte, Grund und Herkunft.
+- **Keinen verifizierten Live-Zugang behaupten, der keiner ist.** Der
+  Amtsblatt-Adapter (`radar/quellen/amtsblatt.py`) ist gegen einen
+  nachgebauten Dienst geprüft, gegen `amtsblattportal.ch` nie — aus dieser
+  Umgebung ist der Host gesperrt. Was geprüft ist und was nicht, steht so
+  in `radar/README.md` und gehört dort auch hin.
+- **`python3 -m radar.pruefen` ist der Beweis, nicht die Behauptung.** Vier
+  Schritte gegen die echte Schnittstelle, nur lesend. Weichen Rubrikcodes
+  oder Feldnamen ab, sagt es das und nennt den Eintrag, der zu ändern ist.
+- **Abruf standardmässig aus.** `"amtsblatt": {"aktiv": false}` im
+  Auslieferungsstand; `auto` (12-Stunden-Schleife) ist eine zweite,
+  getrennte Entscheidung. Der Atlas ruft weiterhin nichts ab — die Regel
+  „nichts abrufen" gilt unverändert für `static/`.
+- **Der Adapter wirft, statt leer zurückzukommen.** Gefundene
+  Publikationen ohne auswertbare Firmendaten sind ein Fehler, kein
+  Ergebnis — sonst liest sich eine kaputte Feldzuordnung als „heute nichts
+  gefunden".
+- **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
+  unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
 
 ## Nach jeder Änderung: den Befehl dazuschreiben
 

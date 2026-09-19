@@ -2,16 +2,20 @@
   "kantone": ["ZH", "AG", "ZG", "SZ", "SG", "LU"],
   "min_score": 60,
 
-  "_shab": "NICHT VERIFIZIERT. Erst einrichten, wenn Schnittstelle und Nutzungsbedingungen geprueft sind — siehe Kopf von radar/quellen/shab.py.",
-  "shab": {
+  "_loeschfrist": "Konkursmeldungen ueber Einzelfirmen sind Personendaten. 0 = nie loeschen, dann bewusst entscheiden.",
+  "loeschfrist_tage": 730,
+
+  "_amtsblatt": "Offene Schnittstelle von amtsblattportal.ch (SHAB + Kantonsblaetter). Kein Schluessel noetig. AUS im Auslieferungsstand. Erst  python3 -m radar.pruefen  laufen lassen, dann aktiv/auto auf true setzen.",
+  "amtsblatt": {
     "aktiv": false,
-    "verifiziert": false,
-    "basis_url": "",
-    "kopfzeilen": {},
+    "auto": false,
+    "intervall_stunden": 12,
+    "basis_url": "https://amtsblattportal.ch/api/v1",
     "rubriken": [],
-    "kantone": ["ZH", "AG", "ZG", "SZ", "SG", "LU"],
+    "kantone": [],
     "seitengroesse": 100,
-    "feld_ab": "publicationDate.start",
-    "feld_kanton": "cantons"
+    "max_seiten": 10,
+    "max_details": 120,
+    "pause_sekunden": 0.4
   }
 }

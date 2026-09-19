@@ -125,7 +125,8 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
   <select id="branche"><option value="">alle</option></select>
   <label>STATUS</label>
   <select id="status"><option value="">alle</option></select>
-  <button class="gruen" id="importKnopf">Datei importieren</button>
+  <button class="gruen" id="abrufen">Jetzt abrufen</button>
+  <button id="importKnopf">Datei importieren</button>
   <input type="file" id="datei" hidden accept=".csv,.json,.pdf">
   <button id="csv">CSV</button>
   <button id="xlsx">Excel</button>
@@ -328,6 +329,26 @@ async function zustand() {
     : "noch keiner";
   $("stand").textContent = d.zahlen.gesamt + " Fälle erfasst";
 }
+
+$("abrufen").onclick = async () => {
+  $("abrufen").disabled = true;
+  $("importMeldung").textContent = "rufe Amtsblattportal ab …";
+  try {
+    // POST, nicht GET: der Abruf holt Daten und schreibt sie weg, das ist
+    // eine Änderung und kein Lesen.
+    const d = await (await fetch("api/abrufen",
+      { method: "POST" })).json();
+    $("importMeldung").textContent = d.fehler
+      ? "Abruf fehlgeschlagen: " + d.fehler
+      : d.gelesen + " gelesen · " + d.neu + " neu · " + d.aktualisiert +
+        " aktualisiert";
+    if (d.protokoll) console.log(d.protokoll.join("\n"));
+  } catch (e) {
+    $("importMeldung").textContent = "Fehler: " + e.message;
+  }
+  $("abrufen").disabled = false;
+  laden(); zustand();
+};
 
 $("importKnopf").onclick = () => $("datei").click();
 $("datei").onchange = async (e) => {

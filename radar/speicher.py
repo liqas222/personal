@@ -225,6 +225,22 @@ class Speicher:
             "SELECT DISTINCT branche FROM faelle ORDER BY branche")]
         return z
 
+    def aufraeumen(self, tage):
+        """Fälle löschen, die älter sind als `tage` und unbearbeitet.
+
+        Bearbeitete Fälle (Status ungleich Neu/Aktualisiert/Verworfen)
+        bleiben: daran hängt Arbeit, und ihr Verschwinden wäre ein
+        Datenverlust. Alles andere ist Vorrat, der irgendwann weg muss.
+        """
+        import datetime as _dt
+        grenze = (_dt.date.today() - _dt.timedelta(days=tage)).isoformat()
+        c = self.db.execute(
+            "DELETE FROM faelle WHERE COALESCE(publikationsdatum, "
+            "substr(erstmals,1,10)) < ? AND status IN "
+            "('Neu','Aktualisiert','Verworfen')", (grenze,))
+        self.db.commit()
+        return c.rowcount
+
     # -- Laufprotokoll -----------------------------------------------------
 
     def lauf_beginnen(self, quelle):
