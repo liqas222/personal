@@ -32,6 +32,9 @@ def main(argv=None):
                         "Lauf) — damit lässt sich Vergangenes nachholen")
     p.add_argument("--shab", action="store_true",
                    help="alter SHAB-Adapter (unverifiziert, abgeschaltet)")
+    p.add_argument("--zweck-nachtragen", action="store_true",
+                   help="Bestehenden Fällen den Zweckartikel aus dem "
+                        "Handelsregister nachtragen und neu bewerten")
     p.add_argument("--meldung", action="store_true",
                    help="Tagesmeldung ausgeben")
     p.add_argument("--markieren", action="store_true",
@@ -68,6 +71,17 @@ def main(argv=None):
         if b.get("bemerkung"):
             print("  " + b["bemerkung"])
 
+    if a.zweck_nachtragen:
+        b = app.zweck_nachtragen()
+        if b.get("fehler"):
+            sys.exit("Nachtragen nicht möglich: " + b["fehler"])
+        print("%d Fälle ohne Zweck geprüft, %d ergänzt und neu bewertet"
+              % (b["geprueft"], b["ergaenzt"]))
+        if b["geprueft"] and not b["ergaenzt"]:
+            print("  Keiner gefunden. Entweder kennt das Portal die "
+                  "UID-Suche anders (siehe radar.pruefen Schritt 5), oder "
+                  "zu den Firmen gibt es keine HR-Publikation.")
+
     if a.shab:
         q = ShabQuelle(app.cfg().get("shab"))
         ok, grund = q.verfuegbar()
@@ -96,7 +110,8 @@ def main(argv=None):
             sp.als_gemeldet_markieren(ids)
             print("\n(%d Fälle als gemeldet markiert)" % len(ids))
 
-    if not (a.datei or a.abrufen or a.tage or a.shab or a.meldung):
+    if not (a.datei or a.abrufen or a.tage or a.zweck_nachtragen
+            or a.shab or a.meldung):
         p.print_help()
 
 

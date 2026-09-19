@@ -725,6 +725,61 @@ class TestAmtsblattAbfrage(unittest.TestCase):
         self.assertEqual(len(saetze), 1)
         self.assertFalse(saetze[0].get("zweck"))
 
+    def test_nachtragen_hebt_den_score(self):
+        """Ein neutraler Firmenname trägt nichts — der Zweck schon.
+
+        Das ist der ganze Zweck des Nachtragens: „Wyss & Partner AG"
+        sagt nichts über Lastwagen, der Zweckartikel schon.
+        """
+        from radar import kette
+        from radar.speicher import Speicher
+        with tempfile.TemporaryDirectory() as ordner:
+            sp = Speicher(os.path.join(ordner, "radar.db"))
+            kette.verarbeiten([{
+                "firma": "Wyss & Partner AG", "uid": "CHE-116.284.335",
+                "ort": "Kloten", "kanton": "ZH",
+                "publikationsdatum": "2026-09-16",
+                "meldungsart": "Konkurseröffnung",
+                "gruendung": "2009-03-02",
+                "text": "Über die Gesellschaft wurde der Konkurs eröffnet.",
+            }], sp, STICHTAG)
+            fall = sp.suchen(min_score=0)[0]
+            vorher = fall["score"]
+            self.assertEqual(fall["branche"], "Nicht erkennbar")
+
+            sp.zweck_setzen(fall["id"], "Nationale und internationale "
+                                        "Transporte, Spedition und "
+                                        "Lagerhaltung")
+            neu = kette.neu_bewerten(sp.holen(fall["id"]), STICHTAG)
+            sp.bewertung_setzen(fall["id"], neu)
+
+            nachher = sp.holen(fall["id"])
+            self.assertGreater(nachher["score"], vorher)
+            self.assertEqual(nachher["branche"], "Logistik und Transport")
+            self.assertIn("Lastwagen", nachher["assets"])
+            sp.schliessen()
+
+    def test_nachtragen_laesst_den_status_stehen(self):
+        """Neu bewerten darf keine geleistete Arbeit wegwerfen."""
+        from radar import kette
+        from radar.speicher import Speicher
+        with tempfile.TemporaryDirectory() as ordner:
+            sp = Speicher(os.path.join(ordner, "radar.db"))
+            kette.verarbeiten([{"firma": "Wyss & Partner AG",
+                                "publikationsdatum": "2026-09-16"}],
+                              sp, STICHTAG)
+            fall = sp.suchen(min_score=0)[0]
+            sp.status_setzen(fall["id"], "Inventarliste angefragt",
+                             "am Montag anrufen")
+            sp.zweck_setzen(fall["id"], "Betrieb einer Garage")
+            sp.bewertung_setzen(
+                fall["id"], kette.neu_bewerten(sp.holen(fall["id"]),
+                                               STICHTAG))
+            nachher = sp.holen(fall["id"])
+            self.assertEqual(nachher["status"], "Inventarliste angefragt")
+            self.assertEqual(nachher["notiz"], "am Montag anrufen")
+            sp.schliessen()
+
     def test_zwecksuche_abschaltbar(self):
         from radar.quellen.amtsblatt import AmtsblattQuelle
         self.assertFalse(

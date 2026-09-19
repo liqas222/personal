@@ -133,6 +133,7 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
     <option value="90">letzte 90 Tage</option>
     <option value="365">letztes Jahr</option>
   </select>
+  <button id="zweckKnopf" title="Bestehenden Fällen den Zweckartikel aus dem Handelsregister nachtragen und neu bewerten">Zweck nachtragen</button>
   <button id="importKnopf">Datei importieren</button>
   <input type="file" id="datei" hidden accept=".csv,.json,.pdf">
   <button id="csv">CSV</button>
@@ -390,6 +391,24 @@ $("abrufen").onclick = async () => {
     $("importMeldung").textContent = "Fehler: " + e.message;
   }
   $("abrufen").disabled = false;
+  laden(); zustand();
+};
+
+$("zweckKnopf").onclick = async () => {
+  $("zweckKnopf").disabled = true;
+  $("importMeldung").textContent = "schlage Zweckartikel nach …";
+  try {
+    const d = await (await fetch("api/zweck", { method: "POST" })).json();
+    $("importMeldung").textContent = d.fehler
+      ? "Nicht möglich: " + d.fehler
+      : d.geprueft + " Fälle ohne Zweck geprüft · " + d.ergaenzt +
+        " ergänzt und neu bewertet" +
+        (d.geprueft && !d.ergaenzt
+          ? " — keiner gefunden; siehe radar.pruefen Schritt 5" : "");
+  } catch (e) {
+    $("importMeldung").textContent = "Fehler: " + e.message;
+  }
+  $("zweckKnopf").disabled = false;
   laden(); zustand();
 };
 

@@ -37,6 +37,15 @@ def _hole(url, akzeptiere="application/json", zeitlimit=25):
         return r.status, r.read()
 
 
+def _tag(wurzel, name):
+    """Ersten nichtleeren Text unter diesem Tagnamen (Namensraum egal)."""
+    for k in wurzel.iter():
+        if k.tag.split("}")[-1].lower() == name.lower():
+            if k.text and k.text.strip():
+                return k.text.strip()
+    return None
+
+
 def schritt(nr, was):
     print("\n[%d] %s" % (nr, was))
     print("-" * 68)
@@ -102,7 +111,32 @@ def main(argv=None):
 
     # --- 3. Enthält das Detail-XML die gebrauchten Felder? --------------
     schritt(3, "Detail-XML einer Publikation — welche Felder gibt es?")
-    pid = kopf[0]["id"]
+    # Eine FIRMA aussuchen, keine Privatperson. Beim ersten Lauf erwischte
+    # die Prüfung eine Privatperson und meldete „UID NICHT GEFUNDEN,
+    # Zweck NICHT GEFUNDEN" — beides bei einer Privatperson völlig
+    # normal, als Befund aber irreführend.
+    pid, firmen_pid = kopf[0]["id"], None
+    for k in kopf[:12]:
+        try:
+            _, roh = _hole("%s/publications/%s/xml" % (basis, k["id"]),
+                           "application/xml")
+            w = ET.fromstring(roh.decode("utf-8", "replace"))
+            art = (_tag(w, "selectType") or "").lower()
+            if art and art != "person":
+                firmen_pid = k["id"]
+                break
+            if _tag(w, "uid"):
+                firmen_pid = k["id"]
+                break
+        except Exception:
+            continue
+        time.sleep(0.3)
+    if firmen_pid:
+        pid = firmen_pid
+    else:
+        print("  Keine Firma unter den ersten Publikationen — es wird eine "
+              "Privatperson gezeigt. Dass dort UID und Zweck fehlen, ist "
+              "dann normal und kein Befund.")
     try:
         code, roh = _hole("%s/publications/%s/xml" % (basis, pid),
                           "application/xml")
@@ -122,9 +156,9 @@ def main(argv=None):
                            "debtorName"),
             "UID": ("uid", "uidNumber", "cheNumber"),
             "Ort": ("town", "city", "municipality", "seat", "legalSeat"),
-            "Zweck": ("purpose", "zweck", "businessPurpose"),
-            "Konkursamt": ("officeName", "registryOffice",
-                           "bankruptcyOffice", "office"),
+            "Konkursamt": ("registrationOfficeAndCirculationAuthority",
+                           "registrationOffice", "officeName",
+                           "registryOffice", "bankruptcyOffice", "office"),
         }
         print("\nWas der Radar braucht:")
         fehlt = []
@@ -135,6 +169,13 @@ def main(argv=None):
                                   else "NICHT GEFUNDEN"))
             if not treffer:
                 fehlt.append(was)
+        # Der Zweck steht hier absichtlich NICHT in der Pflichtliste:
+        # eine Konkurspublikation enthält keinen. Ihn hier als „fehlend"
+        # zu melden, würde den echten Befund verwässern — geholt wird er
+        # aus dem Handelsregister, und das prüft Schritt 5.
+        zweck_da = bool({"purpose", "zweck", "businesspurpose"} & vorhanden)
+        print("  %-12s %s" % ("Zweck", "purpose" if zweck_da else
+                              "nicht enthalten — normal, siehe Schritt 5"))
         if fehlt:
             print("\n  Fehlende Felder heissen im XML vermutlich anders. Die "
                   "obige Feldliste zeigt, wie. Danach in "
@@ -146,8 +187,13 @@ def main(argv=None):
     # --- 4. Voller Durchlauf, ohne zu speichern -------------------------
     schritt(4, "Vollständiger Adapterlauf (ohne Speichern)")
     try:
+        # Genug Publikationen, dass Firmen dabei sind: ein grosser Teil
+        # der Konkursrubriken betrifft Privatpersonen, und bei fünf
+        # Stück ist es gut möglich, dass keine einzige Firma auftaucht.
         q2 = AmtsblattQuelle({"basis_url": basis, "max_seiten": 1,
-                              "seitengroesse": 20, "max_details": 5,
+                              "seitengroesse": 40, "max_details": 40,
+                              "pause_sekunden": 0.3,
+                              "zweck_nachschlagen": False,
                               "zusatz_parameter": zusatz})
         saetze = q2.holen(seit)
         print("%d verwertbare Sätze" % len(saetze))

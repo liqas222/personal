@@ -19,13 +19,14 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 70 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 72 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
 | **Live-Abruf Amtsblattportal** | **läuft**, gegen den echten Dienst geprüft: 60 Fälle beim ersten 7-Tage-Lauf |
 | Zweckartikel aus dem Handelsregister | **gebaut**, gegen einen Nachbau geprüft — beim echten Dienst mit `radar.pruefen` Schritt 5 bestätigen |
+| Zweck für bestehende Fälle nachtragen | **läuft**, Knopf „Zweck nachtragen“ bzw. `--zweck-nachtragen` |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
@@ -78,11 +79,18 @@ es im Protokoll unter „Letzter Lauf".
   das fest.
 
 * Der Detailabruf liefert die Felder. Sie heissen teils anders als
-  angenommen und sind nachgezogen: das zuständige Amt steht in
-  `registrationOfficeAndCirculationAuthority` (Klarname zusätzlich in
-  `displayName`), das Aktenzeichen in `publicationNumber` (`KK04-0000060367`
-  — das ist, was ein Konkursamt am Telefon versteht; die interne uuid
-  nicht). Ort ist `town`, Firmenname `name`.
+  angenommen und sind nachgezogen: das Aktenzeichen steht in
+  `publicationNumber` (`KK04-0000060367` — das ist, was ein Konkursamt am
+  Telefon versteht; die interne uuid nicht), Ort ist `town`, Firmenname
+  `name`.
+* **Feldnamen unterscheiden sich je Rubrik.** Das zuständige Amt heisst
+  bei KK04 `registrationOfficeAndCirculationAuthority`, bei KK03 schlicht
+  `registrationOffice`. Beide stehen jetzt im Adapter. Ein einzelnes
+  Beispiel beweist einen Feldnamen also nicht — und genau deshalb sucht
+  sich `radar.pruefen` in Schritt 3 eine **Firma** aus statt einfach die
+  erste Publikation zu nehmen: beim ersten Lauf war das eine
+  Privatperson, und „UID NICHT GEFUNDEN" las sich wie ein Befund, war
+  aber völlig normal.
 
 ### Privatpersonen werden übersprungen
 
@@ -190,6 +198,31 @@ welcher es beim echten Dienst ist.
 Findet keine Variante etwas, bleibt der Zweck leer und der Lauf geht
 trotzdem durch — dann hilft nur Score ab 0 und eigenes Sichten.
 Abschalten lässt sich die Suche mit `"zweck_nachschlagen": false`.
+
+### Bestehende Fälle nachrüsten
+
+Die Zwecksuche kam später dazu als die ersten Läufe. Fälle, die schon in
+der Datenbank liegen, bekommen ihren Zweck nicht von selbst — dafür gibt
+es den Knopf **„Zweck nachtragen“** und:
+
+```bash
+python3 -m radar.lauf --zweck-nachtragen
+```
+
+Geholt wird nur für Fälle mit UID und ohne Zweck; anschliessend werden
+sie **neu bewertet**, sonst bliebe der alte Score stehen. Status und
+Notiz bleiben unangetastet — daran hängt Arbeit.
+
+Was das ausmacht, an einem Fall mit nichtssagendem Namen:
+
+```
+vorher:   25  Wyss & Partner AG   Nicht erkennbar
+nachher:  55  Wyss & Partner AG   Logistik und Transport
+          Assets: Lastwagen, Anhänger, Stapler, Regalanlagen, Hubwagen
+```
+
+Damit muss die Datenbank nicht weggeworfen werden, um an brauchbare
+Scores zu kommen.
 
 ### Wenn die Liste leer aussieht
 
@@ -419,7 +452,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            70 Tests, kein Netz nötig
+└── tests/            72 Tests, kein Netz nötig
 ```
 
 ### Tests

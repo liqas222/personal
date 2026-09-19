@@ -297,6 +297,9 @@ def behandle_post(pfad, koerper, content_type, dateiname=None):
         d = json.loads(koerper or b"{}")
         return _json_antwort(abrufen(d.get("tage")))
 
+    if pfad == "/api/zweck":
+        return _json_antwort(zweck_nachtragen())
+
     if pfad == "/api/status":
         d = json.loads(koerper or b"{}")
         if d.get("status") not in modell.STATUS_WERTE:
@@ -389,6 +392,43 @@ def abrufen(tage=None):
     bericht["seit"] = seit
     aufraeumen()
     return bericht
+
+
+def zweck_nachtragen(grenze=200):
+    """Bestehenden Fällen den Zweckartikel nachtragen und neu bewerten.
+
+    Gebraucht wird das, weil die Zwecksuche später dazukam als die ersten
+    Läufe. Ohne Nachtragen müsste man die Datenbank wegwerfen, um an
+    brauchbare Scores zu kommen — und damit auch jeden Status, jede Notiz
+    und jede bereits geleistete Arbeit. Das ist es nicht wert.
+
+    Bewertet wird anschliessend neu, sonst bliebe der alte Score stehen
+    und der neue Zweck wäre ohne Wirkung.
+    """
+    sp = speicher()
+    q = AmtsblattQuelle(cfg().get("amtsblatt"))
+    ok, grund = q.verfuegbar()
+    if not ok:
+        return {"fehler": grund}
+
+    offen = [f for f in sp.suchen(min_score=0, limit=grenze)
+             if f.get("uid") and not (f.get("zweck") or "").strip()]
+    gefunden, versucht = 0, 0
+    for fall in offen:
+        versucht += 1
+        try:
+            zweck = q._zweck_zu_uid(fall["uid"])
+        except Exception:
+            continue
+        if not zweck:
+            continue
+        gefunden += 1
+        sp.zweck_setzen(fall["id"], zweck)
+        neu = kette.neu_bewerten(sp.holen(fall["id"]))
+        sp.bewertung_setzen(fall["id"], neu)
+    return {"geprueft": versucht, "ergaenzt": gefunden,
+            "ohne_uid_oder_schon_da": sp.zahlen()["gesamt"] - versucht,
+            "parameter": q.uid_parameter}
 
 
 def aufraeumen():

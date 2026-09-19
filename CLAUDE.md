@@ -113,6 +113,24 @@ Protokoll.
 - **Jeder Abruf sagt, ab wann er gesucht hat.** Ohne diese Angabe ist ein
   Ergebnis nicht einzuordnen — „0 neu" heisst etwas völlig anderes, je
   nachdem ob ein Tag oder ein Jahr durchsucht wurde.
+- **Feldnamen unterscheiden sich je Rubrik.** Das Konkursamt heisst bei
+  KK04 `registrationOfficeAndCirculationAuthority`, bei KK03 schlicht
+  `registrationOffice`. Beide Schreibweisen stehen im Adapter. Ein
+  einzelnes Beispiel beweist einen Feldnamen also nicht.
+- **Die Prüfung muss sich eine FIRMA aussuchen.** Schritt 3 erwischte
+  eine Privatperson und meldete „UID NICHT GEFUNDEN, Zweck NICHT
+  GEFUNDEN" — bei einer Privatperson beides normal, als Befund aber
+  irreführend. Dass der Zweck fehlt, ist ausserdem NIE ein Befund: er
+  steht nicht in Konkurspublikationen.
+- **Die Zusammenfassungszeile muss allein verständlich sein.** Sie ist
+  das, was in der Fusszeile und auf der Kommandozeile erscheint; eine
+  Erklärung weiter oben im Protokoll sieht niemand. Deshalb steht der
+  Zweckstand („12 Zweckartikel gefunden, 3 ohne") dort mit drin.
+- **Nachrüsten statt Datenbank wegwerfen.** `--zweck-nachtragen` holt
+  fehlende Zweckartikel für bestehende Fälle und bewertet sie neu
+  (`kette.neu_bewerten`); Status und Notiz bleiben. Ein Fall ging dabei
+  von 25 auf 55 — das ist der Unterschied zwischen unbrauchbar und
+  brauchbar.
 - **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
   unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
 

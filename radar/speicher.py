@@ -184,6 +184,31 @@ class Speicher:
                         % ", ".join(felder), werte)
         self.db.commit()
 
+    def zweck_setzen(self, fall_id, zweck):
+        self.db.execute("UPDATE faelle SET zweck = ? WHERE id = ?",
+                        (zweck, fall_id))
+        self.db.commit()
+
+    def bewertung_setzen(self, fall_id, neu):
+        """Branche, Assets, Score und Begründung eines Falls ersetzen.
+
+        Der Status des Nutzers wird NICHT angefasst — wer einen Fall
+        bearbeitet hat, soll ihn nach einer Neubewertung genauso
+        wiederfinden.
+        """
+        klass, bew = neu["klass"], neu["bew"]
+        assets = klass["assets_genannt"] + klass["assets_vermutet"]
+        self.db.execute(
+            "UPDATE faelle SET branche = ?, assets = ?, score = ?, "
+            "score_amtlich = ?, begruendung = ?, einschraenkungen = ?, "
+            "naechster_schritt = ?, zuletzt = ? WHERE id = ?",
+            (klass["branche"], json.dumps(assets, ensure_ascii=False),
+             bew["score"], bew["nur_amtlich"],
+             json.dumps(bew["zeilen"], ensure_ascii=False),
+             json.dumps(neu["einschraenkungen"], ensure_ascii=False),
+             neu["naechster_schritt"], jetzt(), fall_id))
+        self.db.commit()
+
     def als_gemeldet_markieren(self, ids):
         self.db.executemany("UPDATE faelle SET gemeldet = 1 WHERE id = ?",
                             [(i,) for i in ids])

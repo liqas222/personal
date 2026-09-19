@@ -347,9 +347,14 @@ class AmtsblattQuelle(Quelle):
             # das zuständige Amt steht in
             # `registrationOfficeAndCirculationAuthority`, sein Klarname
             # zusätzlich in `displayName`.
+            # Das zuständige Amt heisst je nach Rubrik anders: bei KK04
+            # `registrationOfficeAndCirculationAuthority`, bei KK03
+            # schlicht `registrationOffice`. Beide Schreibweisen sind aus
+            # echten Publikationen belegt — deshalb stehen beide hier.
             "konkursamt": _text(wurzel,
                                 "registrationOfficeAndCirculationAuthority",
-                                "displayName", "officeName", "registryOffice",
+                                "registrationOffice", "displayName",
+                                "officeName", "registryOffice",
                                 "bankruptcyOffice", "office"),
             # `publicationNumber` (z. B. KK04-0000060367) ist das, was ein
             # Konkursamt am Telefon versteht — die interne uuid nicht.
@@ -546,8 +551,8 @@ class AmtsblattQuelle(Quelle):
 
         # Zweckartikel nachschlagen — erst jetzt, damit dafür nur Firmen
         # angefragt werden, die es überhaupt in die Liste geschafft haben.
+        zwecke, ohne_zweck = 0, 0
         if self.zweck_nachschlagen:
-            zwecke = 0
             for satz in raus[:self.max_zweck]:
                 if satz.get("zweck") or not satz.get("uid"):
                     continue
@@ -560,14 +565,24 @@ class AmtsblattQuelle(Quelle):
                 if z:
                     satz["zweck"] = z
                     zwecke += 1
+                else:
+                    ohne_zweck += 1
                 time.sleep(self.pause)
-            self.protokoll.append(
-                "%d Zweckartikel aus dem Handelsregister nachgeschlagen"
-                % zwecke)
 
-        self.protokoll.append(
-            "%d verwertbare Sätze, %d natürliche Personen übersprungen, "
-            "%d Details fehlgeschlagen" % (len(raus), personen, fehler))
+        # Diese Zeile ist das, was in der Fusszeile und auf der
+        # Kommandozeile erscheint. Sie muss allein verständlich sein —
+        # eine Erklärung, die nur weiter oben im Protokoll steht, sieht
+        # niemand. Deshalb gehört der Zweckstand hier mit hinein: ohne
+        # ihn bleibt offen, warum die Scores niedrig sind.
+        teile = ["%d verwertbare Sätze" % len(raus)]
+        if self.zweck_nachschlagen and (zwecke or ohne_zweck):
+            teile.append("%d Zweckartikel gefunden, %d ohne"
+                         % (zwecke, ohne_zweck))
+        elif not self.zweck_nachschlagen:
+            teile.append("Zwecksuche abgeschaltet")
+        teile.append("%d natürliche Personen übersprungen" % personen)
+        teile.append("%d Details fehlgeschlagen" % fehler)
+        self.protokoll.append(", ".join(teile))
         if kopfdaten and not raus and not personen:
             # Wichtig: nicht schweigend nichts zurückgeben. Wenn die Liste
             # Treffer hatte, das Detail-XML aber keine Firmennamen hergab,

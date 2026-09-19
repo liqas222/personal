@@ -116,3 +116,37 @@ def tagesmeldung(speicher, kantone=None, min_score=None):
         return KEINE_TREFFER, []
     text = "\n\n".join(meldung_bauen(f) for f in faelle)
     return text, [f["id"] for f in faelle]
+
+
+def neu_bewerten(zeile, stichtag=None):
+    """Einen gespeicherten Fall noch einmal durch Klassierung und
+    Bewertung schicken.
+
+    Gebraucht, wenn sich die Grundlage geändert hat — etwa weil der
+    Zweckartikel nachgetragen wurde. Ohne das bliebe der alte Score
+    stehen und die Ergänzung wäre wirkungslos.
+
+    Erwartet eine Zeile aus dem Speicher, nicht einen Rohsatz.
+    """
+    fall = modell.fall_bauen({
+        "firma": zeile.get("firma"),
+        "uid": zeile.get("uid"),
+        "ort": zeile.get("ort"),
+        "kanton": zeile.get("kanton"),
+        "publikationsdatum": zeile.get("publikationsdatum"),
+        "konkursdatum": zeile.get("konkursdatum"),
+        "meldungsart": zeile.get("art_text") or zeile.get("art"),
+        "zweck": zeile.get("zweck"),
+        "gruendung": zeile.get("gruendung"),
+        "konkursamt": zeile.get("konkursamt"),
+        "aktenzeichen": zeile.get("aktenzeichen"),
+        "text": zeile.get("rohtext"),
+    }, stichtag)
+    klass = klassierung.klassieren(fall["zweck"], fall["rohtext"])
+    bew = bewertung.bewerten(fall, klass)
+    return {
+        "klass": klass,
+        "bew": bew,
+        "einschraenkungen": bewertung.einschraenkungen(fall, klass),
+        "naechster_schritt": bewertung.naechster_schritt(fall),
+    }
