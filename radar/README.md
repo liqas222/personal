@@ -24,7 +24,7 @@ steht, ist nicht geprüft.
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
 | Tagesmeldung | **läuft**, getestet |
-| **Live-Abruf Amtsblattportal** | Adapter fertig, gegen einen nachgebauten Dienst geprüft. Gegen den echten Dienst: Rubrikliste **antwortet**, Trefferliste gab **HTTP 401** — noch nicht gelöst, siehe unten |
+| **Live-Abruf Amtsblattportal** | Adapter fertig und gegen nachgebaute Dienste geprüft. Gegen den echten Dienst: Rubrikliste **antwortet**, Trefferliste wird **zugelassen**, liefert aber **null Einträge** — noch nicht gelöst, siehe unten |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
@@ -59,23 +59,28 @@ Dokumentation und aus quelloffenen Projekten, die diese Schnittstelle
 benutzen — das ist etwas anderes als ausgedacht, aber kein Ersatz für einen
 echten Lauf.
 
-**Was der erste echte Lauf ergeben hat** (Server, 2026-09-19):
+**Was die echten Läufe ergeben haben** (Server, 2026-09-19):
 
-* Die Schnittstelle existiert. `/rubrics` antwortet mit HTTP 200 und 982
-  Rubrikcodes. Die Konkursrubriken gehen weiter als angenommen: **KK01 bis
-  KK12**, Betreibung **SB01 bis SB07**. Der Adapter nimmt jetzt alle.
-* `/publications` antwortete mit **HTTP 401**. Das ist kein fehlendes
-  Konto — die Rubrikliste geht ja ohne — sondern heisst: *so* darf nicht
-  gefragt werden. Welcher Parameter dafür nötig ist, lässt sich nicht
-  erraten, also probiert `radar.pruefen` jetzt eine Reihe von Varianten
-  durch (mit und ohne `publicationStates=PUBLISHED`, JSON und XML, dazu
-  `www.shab.ch` als zweiter Host) und nennt die, die wirklich Treffer
-  liefert — samt der Zeile, die dann in `config.json` gehört.
-* Lehnt **jede** Variante mit 401 ab, sagt die Prüfung das ausdrücklich:
-  dann lässt das Portal anonyme Abfragen nicht zu, kein Parameter
-  repariert das, und es braucht einen Zugang vom Betreiber. Bis dahin
-  bleibt der Import von Hand (CSV, JSON, PDF) — das ist eine mögliche
-  Antwort, und sie wird nicht als „nichts gefunden" verkleidet.
+* Die Schnittstelle existiert. `/rubrics` antwortet mit HTTP 200. Die
+  Konkursrubriken gehen weiter als angenommen: **KK01 bis KK12**,
+  Betreibung **SB01 bis SB07**. Der Adapter nimmt jetzt alle.
+* Die Trefferliste wird zugelassen, **sobald `publicationStates=PUBLISHED`
+  mitgeschickt wird** — ohne diesen Parameter kommt HTTP 401. Das ist kein
+  fehlendes Konto, sondern eine nicht zugelassene Abfrage. Der Parameter
+  ist jetzt Vorgabe. Auf `www.shab.ch` gilt dasselbe.
+* **Offen ist:** die zugelassene Abfrage antwortet mit **HTTP 200 und null
+  Einträgen**. Das kann zweierlei heissen, und die beiden sehen von aussen
+  gleich aus:
+  1. Die Antwort enthält Einträge, mein Leser findet sie nicht (anderer
+     Schlüssel als `content`).
+  2. Die Antwort ist wirklich leer — dann beantwortet das Portal anonyme
+     Trefferlisten nicht, und es braucht einen Zugang vom Betreiber.
+
+  Schritt 2 der Prüfung hält das jetzt auseinander: er zeigt je Abfrage
+  nebeneinander, wie viele Einträge **die Antwort** enthält und wie viele
+  **mein Leser** daraus macht, schaltet die Filter einzeln zu und nennt am
+  Ende den Befund beim Namen. Beide Fälle sind gegen nachgebaute Dienste
+  geprüft, ebenso der Normalfall.
 
 **Deshalb zuerst das hier ausführen:**
 

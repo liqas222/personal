@@ -19,6 +19,7 @@ die Konfiguration lässt sich gezielt anpassen, ohne Code zu ändern.
 """
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -81,7 +82,6 @@ def main(argv=None):
 
     # --- 2. Liefert die Liste Treffer? ----------------------------------
     schritt(2, "Trefferliste — welche Abfrage lässt der Dienst zu?")
-    import time
     seit = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 14 * 86400))
     bis = time.strftime("%Y-%m-%d")
 
@@ -166,15 +166,76 @@ def main(argv=None):
         return 1
 
 
-def _variante_finden(basis, seit, bis):
-    """Die Abfrage suchen, die der Dienst tatsächlich zulässt.
+def _abfrage(host, felder, accept="application/json", zeitlimit=25):
+    """Eine Trefferlisten-Abfrage stellen. Gibt (code, rohbytes) zurück."""
+    url = host + "/publications?" + urllib.parse.urlencode(felder)
+    req = urllib.request.Request(url, headers={
+        "Accept": accept,
+        "User-Agent": "konkurs-deal-radar/1.0 (Schnittstellenpruefung)",
+    })
+    with urllib.request.urlopen(req, timeout=zeitlimit) as r:
+        return r.status, r.read()
 
-    Die Rubrikliste antwortet ohne Anmeldung, die Trefferliste kann mit 401
-    ablehnen. Ein 401 auf einem offenen Dienst heisst fast nie „Konto
-    fehlt", sondern „so darfst du nicht fragen". Welcher Parameter das ist,
-    lässt sich nicht erraten — also wird es durchprobiert, mit einer
-    einzigen Rubrik und einer winzigen Seite, damit der Dienst dabei kaum
-    belastet wird.
+
+def _struktur(roh):
+    """Beschreiben, wie die Antwort gebaut ist und wo Einträge stecken.
+
+    Der entscheidende Unterschied: eine Antwort ohne Einträge und eine
+    Antwort, deren Einträge ich nur nicht finde, sehen von aussen gleich
+    aus — beide ergeben „0 Treffer". Hier wird auseinandergehalten, was
+    der Dienst geschickt hat und was mein Leser daraus gemacht hat.
+
+    Gibt (beschreibung, listen) zurück; `listen` ist [(pfad, anzahl), ...]
+    aller nichtleeren Listen in der Antwort.
+    """
+    text = roh.decode("utf-8", "replace").strip()
+    listen = []
+    if text.startswith("{") or text.startswith("["):
+        try:
+            d = json.loads(text)
+        except ValueError:
+            return "JSON kaputt: " + text[:120], listen
+
+        def geh(x, pfad):
+            if isinstance(x, dict):
+                for k, v in x.items():
+                    geh(v, pfad + "." + k if pfad else k)
+            elif isinstance(x, list) and x:
+                listen.append((pfad or "(Wurzel)", len(x)))
+
+        geh(d, "")
+        oben = ", ".join(sorted(d)) if isinstance(d, dict) else "Liste"
+        return "JSON, oberste Ebene: " + oben, listen
+
+    try:
+        wurzel = ET.fromstring(text)
+    except ET.ParseError:
+        return "weder JSON noch XML: " + text[:120], listen
+    zaehler = {}
+    for k in wurzel:
+        zaehler[k.tag.split("}")[-1]] = zaehler.get(
+            k.tag.split("}")[-1], 0) + 1
+    for n, c in zaehler.items():
+        if c > 1:
+            listen.append((wurzel.tag.split("}")[-1] + "/" + n, c))
+    return ("XML, Wurzel <%s>, Kinder: %s"
+            % (wurzel.tag.split("}")[-1],
+               ", ".join("%s×%d" % (n, c) for n, c in zaehler.items())
+               or "keine"), listen)
+
+
+def _variante_finden(basis, seit, bis):
+    """Herausfinden, welche Abfrage der Dienst zulässt UND beantwortet.
+
+    Zwei getrennte Fragen, die nacheinander beantwortet werden:
+
+      1. Welche Abfrage wird überhaupt zugelassen? Ohne
+         `publicationStates=PUBLISHED` antwortet das Portal mit 401 — das
+         ist kein fehlendes Konto, sondern eine nicht zugelassene Abfrage.
+      2. Warum kommen trotzdem keine Einträge zurück? Hier wird jeder
+         Filter einzeln zugeschaltet. Bleibt es schon ohne jeden Filter
+         bei null, liegt es nicht am Filter, sondern daran, wie die
+         Antwort gebaut ist — und dann wird genau das gezeigt.
 
     Gibt (basis, zusatz, accept, kopfdaten) zurück oder None.
     """
@@ -184,60 +245,107 @@ def _variante_finden(basis, seit, bis):
         if h not in hosts:
             hosts.append(h)
 
-    zusaetze = [
-        ({"publicationStates": "PUBLISHED"}, "publicationStates=PUBLISHED"),
-        ({}, "ohne Zusatzparameter"),
-        ({"publicationStates": "PUBLISHED",
-          "allowRubricSelection": "true"}, "+ allowRubricSelection=true"),
-        ({"publicationStates": "PUBLISHED", "tenant": "shab"},
-         "+ tenant=shab"),
+    zusatz = {"publicationStates": "PUBLISHED"}
+    grund = [("publicationStates", "PUBLISHED"), ("pageRequest.size", "5")]
+
+    leser = AmtsblattQuelle({"basis_url": basis})
+
+    # -- Frage 1: welcher Host lässt die Abfrage zu? ---------------------
+    host = None
+    for h in hosts:
+        kurz = h.split("//")[-1].split("/")[0]
+        try:
+            code, roh = _abfrage(h, grund)
+            beschreibung, listen = _struktur(roh)
+            anzahl = len(leser._liste_lesen(roh))
+            print("  HTTP %d  %-22s %d Bytes · %s" % (code, kurz, len(roh),
+                                                      beschreibung))
+            print("          gefundene Einträge: %d (mein Leser) | %s"
+                  % (anzahl, ", ".join("%s=%d" % (p, c) for p, c in listen)
+                     or "keine Liste in der Antwort"))
+            if host is None:
+                host = h
+        except urllib.error.HTTPError as e:
+            print("  HTTP %s  %-22s abgelehnt" % (e.code, kurz))
+        except Exception as e:
+            print("  FEHL     %-22s %s" % (kurz, type(e).__name__))
+
+    if host is None:
+        print("\nKein Host liess die Abfrage zu. Ohne Zugang vom Betreiber "
+              "(SECO/SHAB) geht es nicht weiter; bis dahin bleibt der "
+              "Import von Hand: CSV, JSON oder PDF.")
+        return None
+
+    # -- Frage 2: welcher Filter nimmt die Treffer weg? ------------------
+    print("\n  Filter einzeln zuschalten (%s):"
+          % host.split("//")[-1].split("/")[0])
+    proben = [
+        ("ohne Filter", []),
+        ("+ subRubrics=KK01", [("subRubrics", "KK01")]),
+        ("+ rubrics=KK", [("rubrics", "KK")]),
+        ("+ publicationDate.start/.end",
+         [("publicationDate.start", seit), ("publicationDate.end", bis)]),
+        ("+ startDate/endDate", [("startDate", seit), ("endDate", bis)]),
+        ("+ cantons=ZH", [("cantons", "ZH")]),
     ]
-    accepts = ["application/json", "application/xml"]
+    ergebnis = {}
+    for wie, extra in proben:
+        try:
+            code, roh = _abfrage(host, grund + extra)
+            anzahl = len(leser._liste_lesen(roh))
+            _, listen = _struktur(roh)
+            roh_anzahl = max([c for _, c in listen] or [0])
+            ergebnis[wie] = (anzahl, roh_anzahl)
+            print("    %-30s Leser %-4d Antwort %-4d" % (wie, anzahl,
+                                                         roh_anzahl))
+        except urllib.error.HTTPError as e:
+            ergebnis[wie] = None
+            print("    %-30s HTTP %s" % (wie, e.code))
+        except Exception as e:
+            ergebnis[wie] = None
+            print("    %-30s %s" % (wie, type(e).__name__))
+        time.sleep(0.4)
 
-    gesehen = set()
-    for host in hosts:
-        for zusatz, wie in zusaetze:
-            for accept in accepts:
-                q = AmtsblattQuelle({
-                    "basis_url": host, "max_seiten": 1, "seitengroesse": 5,
-                    "rubriken": ["KK01"], "zusatz_parameter": zusatz})
-                kurz = "%s | %s | %s" % (host.split("//")[-1].split("/")[0],
-                                         wie, accept.split("/")[-1])
-                try:
-                    kopf = _liste_mit_accept(q, seit, bis, accept)
-                    print("  OK   %-52s %d Treffer" % (kurz, len(kopf)))
-                    if kopf:
-                        print("\nDiese Abfrage geht. In radar/config.json "
-                              "unter \"amtsblatt\" eintragen:")
-                        print("  " + json.dumps(
-                            {"basis_url": host, "zusatz_parameter": zusatz},
-                            ensure_ascii=False))
-                        return host, zusatz, accept, kopf
-                except urllib.error.HTTPError as e:
-                    print("  %-4s %s" % (e.code, kurz))
-                    gesehen.add(e.code)
-                except Exception as e:
-                    print("  FEHL %-52s %s" % (kurz, type(e).__name__))
+    ohne = ergebnis.get("ohne Filter")
+    if ohne and ohne[1] and not ohne[0]:
+        print("\n  BEFUND: Der Dienst liefert Einträge, mein Leser findet "
+              "sie nicht. Es liegt NICHT am Filter, sondern daran, wie die "
+              "Antwort gebaut ist. Die Zeile mit den gefundenen Einträgen "
+              "oben nennt den Pfad — der gehört in _liste_lesen() in "
+              "radar/quellen/amtsblatt.py.")
+        return None
+    if ohne and not ohne[1]:
+        print("\n  BEFUND: Schon ohne jeden Filter kommt nichts zurück. "
+              "Dann ist es nicht die Abfrage, sondern der Zugang: das "
+              "Portal beantwortet anonyme Trefferlisten offenbar leer. "
+              "Ein Zugang vom Betreiber (SECO/SHAB) wäre der Weg; bis "
+              "dahin bleibt der Import von Hand.")
+        return None
 
-    print("\nKeine Variante lieferte Treffer.")
-    if gesehen <= {401, 403} and gesehen:
-        print("Durchgehend %s. Das Portal lässt die Trefferliste "
-              "offenbar nicht anonym zu — dann gibt es keinen "
-              "Parameter, der das repariert, sondern es braucht einen "
-              "Zugang vom Betreiber (SECO/SHAB). Bis dahin bleibt der "
-              "Import von Hand: CSV, JSON oder PDF."
-              % "/".join(str(c) for c in sorted(gesehen)))
+    # Der beste Filtersatz: alles, was für sich genommen Treffer behielt.
+    felder, benutzt = [], []
+    for wie, extra in proben[1:]:
+        e = ergebnis.get(wie)
+        if e and e[0]:
+            felder.extend(extra)
+            benutzt.append(wie)
+    kopf = []
+    if ohne and ohne[0]:
+        try:
+            code, roh = _abfrage(host, grund + felder)
+            kopf = leser._liste_lesen(roh)
+        except Exception as e:
+            print("  %s" % e)
+    if kopf:
+        print("\n  Diese Abfrage geht (%s). In radar/config.json unter "
+              "\"amtsblatt\" eintragen:" % (", ".join(benutzt) or "ungefiltert"))
+        print("  " + json.dumps({"basis_url": host,
+                                 "zusatz_parameter": zusatz},
+                                ensure_ascii=False))
+        return host, zusatz, "application/json", kopf
+
+    print("\n  Keine Kombination lieferte auswertbare Treffer.")
     return None
-
-
-def _liste_mit_accept(q, seit, bis, accept):
-    """Einen Listenabruf mit einem bestimmten Accept-Header machen."""
-    echt = q._hole
-    q._hole = lambda url, akzeptiere=accept: echt(url, accept)
-    try:
-        return q._liste(seit, bis)
-    finally:
-        q._hole = echt
 
 
 def _codes_sammeln(d, raus=None):
