@@ -231,7 +231,7 @@ class Speicher:
     # -- Lesen -------------------------------------------------------------
 
     def suchen(self, kantone=None, min_score=None, branche=None,
-               status=None, nur_ungemeldet=False, limit=500):
+               status=None, art=None, nur_ungemeldet=False, limit=500):
         wo, werte = [], []
         if kantone:
             wo.append("kanton IN (%s)" % ",".join("?" * len(kantone)))
@@ -242,6 +242,9 @@ class Speicher:
         if branche:
             wo.append("branche = ?")
             werte.append(branche)
+        if art:
+            wo.append("art = ?")
+            werte.append(art)
         if status:
             wo.append("status = ?")
             werte.append(status)

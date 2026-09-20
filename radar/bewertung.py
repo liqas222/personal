@@ -89,17 +89,36 @@ def bewerten(fall, klass, anreicherung=None):
         zeile(0, "Erst %d Jahre alt — wenig angesammeltes Inventar" % alter,
               "Handelsregister")
 
-    # --- Wörtlich genannte Gegenstände ---
-    if klass["assets_genannt"]:
+    # --- Verwertung: ein eigener Weg, und zwar aus gutem Grund ---
+    #
+    # Bei einer Steigerungsanzeige trägt die Firmenlogik nicht. Sie lebt
+    # von Branche, Zweckartikel und Firmenalter — und bei einer Pfändung
+    # gegen eine Privatperson gibt es davon nichts. Dafür gibt es etwas
+    # Besseres: den Gegenstand selbst. Eine Steigerung ist kein Hinweis
+    # auf einen möglichen Deal, sie IST der Verkauf, mit Datum und Amt.
+    #
+    # Deshalb: die Steigerung allein trägt 30, der genannte Gegenstand
+    # weitere 20. Zusammen 50 — die Schwelle. Eine Steigerungsanzeige,
+    # die keinen Gegenstand nennt, bleibt bewusst darunter; sie ist eine
+    # Spur, kein Angebot.
+    art = fall.get("art")
+    if art == "steigerung":
+        zeile(30, "Öffentliche Steigerung — hier wird verkauft, nicht nur "
+                  "gemeldet", "Meldungsart")
+        if klass["assets_genannt"]:
+            zeile(20, "Gegenstände in der Anzeige genannt: " +
+                  ", ".join(klass["assets_genannt"][:3]), "Meldungstext")
+        else:
+            zeile(0, "Die Anzeige nennt keinen Gegenstand — "
+                     "Steigerungsbedingungen beim Amt anfordern",
+                  "Meldungstext")
+    elif klass["assets_genannt"]:
         zeile(10, "Gegenstände im Text genannt: " +
               ", ".join(klass["assets_genannt"][:3]), "Meldungstext")
 
     # --- Meldungsart: sagt etwas über den Zeitpunkt im Verfahren ---
-    art = fall.get("art")
-    if art == "steigerung":
-        zeile(15, "Steigerung oder Verwertung angekündigt — Verwertung läuft",
-              "Meldungsart")
-    elif art == "kollokationsplan":
+    # (Die Steigerung ist oben abgehandelt und taucht hier nicht auf.)
+    if art == "kollokationsplan":
         zeile(10, "Kollokationsplan und Inventar aufgelegt — Masse ist erfasst",
               "Meldungsart")
     elif art == "konkurseroeffnung":

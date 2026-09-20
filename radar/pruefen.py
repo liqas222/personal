@@ -68,9 +68,20 @@ def main(argv=None):
             sb = sorted(c for c in codes if c.upper().startswith("SB"))
             hr = sorted(c for c in codes if c.upper().startswith("HR"))
             print("Rubrikcodes gefunden: %d" % len(codes))
-            print("  Konkurs (KK):      %s" % (", ".join(kk) or "KEINE"))
-            print("  Betreibung (SB):   %s" % (", ".join(sb) or "KEINE"))
-            print("  Handelsreg. (HR):  %s" % (", ".join(hr) or "KEINE"))
+            # Mit Titel, nicht nur mit Code: welche SB-Rubrik eine
+            # Steigerung ist und welche ein Zahlungsbefehl durch
+            # öffentliche Bekanntmachung, entscheidet darüber, was
+            # aufgenommen werden darf — und das lässt sich an „SB04"
+            # nicht ablesen.
+            titel = _titel_sammeln(d)
+            for gruppe, liste in (("Konkurs (KK)", kk),
+                                  ("Betreibung (SB)", sb),
+                                  ("Handelsregister (HR)", hr)):
+                print("  %s:" % gruppe)
+                if not liste:
+                    print("    KEINE")
+                for c in liste:
+                    print("    %-6s %s" % (c, titel.get(c, "(ohne Titel)")))
             if kk and set(kk) != set(KONKURS):
                 print("  ACHTUNG: weichen von der Vorgabe ab. In "
                       "radar/config.json unter \"amtsblatt\" → \"rubriken\" "
@@ -469,6 +480,33 @@ def _variante_finden(basis, seit, bis):
 
     print("\n  Keine Kombination lieferte auswertbare Treffer.")
     return None
+
+
+def _titel_sammeln(d, raus=None):
+    """Code → Titel aus der Rubrikantwort ziehen.
+
+    Ein Eintrag, der einen Code und einen Namen trägt, wird als Paar
+    gemerkt. Welches Feld der Name ist, unterscheidet sich zwischen
+    Diensten — deshalb mehrere Kandidaten, deutscher zuerst.
+    """
+    if raus is None:
+        raus = {}
+    if isinstance(d, dict):
+        code = d.get("code") or d.get("id") or d.get("key")
+        if isinstance(code, str) and any(c.isdigit() for c in code):
+            for feld in ("name", "title", "description", "label"):
+                v = d.get(feld)
+                if isinstance(v, dict):
+                    v = v.get("de") or v.get("fr") or v.get("en")
+                if isinstance(v, str) and v.strip():
+                    raus.setdefault(code, v.strip()[:70])
+                    break
+        for v in d.values():
+            _titel_sammeln(v, raus)
+    elif isinstance(d, list):
+        for v in d:
+            _titel_sammeln(v, raus)
+    return raus
 
 
 def _codes_sammeln(d, raus=None):

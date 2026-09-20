@@ -373,6 +373,25 @@ class AmtsblattQuelle(Quelle):
         return d
 
     @staticmethod
+    def _ist_verwertung(satz, detail):
+        """Wird hier etwas verkauft — oder nur über jemanden berichtet?
+
+        Das ist die Unterscheidung, auf die es beim Datenschutz ankommt.
+        Eine Steigerungsanzeige beschreibt eine **Sache, die öffentlich
+        zum Verkauf steht**; sie wird publiziert, damit Bieter kommen.
+        Sie aufzunehmen ist genau der Zweck, zu dem sie veröffentlicht
+        wurde — auch wenn der Schuldner eine Privatperson ist.
+
+        Ein Schuldenruf oder ein Kollokationsplan über eine Privatperson
+        ist etwas anderes: er berichtet über die Person, nennt keine
+        Sache und enthält ein Geburtsdatum. Der bleibt draussen.
+        """
+        from ..modell import art_erkennen
+        text = " ".join(str(x) for x in (
+            satz.get("meldungsart"), detail.get("text")) if x)
+        return art_erkennen(text) == "steigerung"
+
+    @staticmethod
     def _ist_person(d):
         """Ist diese Publikation eine natürliche Person?
 
@@ -555,10 +574,17 @@ class AmtsblattQuelle(Quelle):
                 time.sleep(self.pause)
                 continue
 
-            if self._ist_person(detail):
-                # Privatperson: verwerfen, bevor irgendetwas davon in den
-                # Satz kommt. Gezählt wird sie, damit im Protokoll
-                # sichtbar bleibt, wie viel der Lauf bewusst weglässt.
+            if self._ist_person(detail) and not self._ist_verwertung(
+                    satz, detail):
+                # Privatperson ohne Verkauf: verwerfen, bevor irgendetwas
+                # davon in den Satz kommt. Gezählt wird sie, damit im
+                # Protokoll sichtbar bleibt, wie viel der Lauf weglässt.
+                #
+                # Die Ausnahme ist wichtig: eine Steigerungsanzeige gegen
+                # eine Privatperson ist der einzige öffentliche Weg, auf
+                # dem Einzelstücke — ein Fahrzeug, eine Uhrensammlung —
+                # legal zu haben sind. Sie pauschal wegzuwerfen hiesse,
+                # den halben Zweck dieses Werkzeugs wegzuwerfen.
                 personen += 1
                 time.sleep(self.pause)
                 continue

@@ -19,7 +19,7 @@ steht, ist nicht geprüft.
 | CSV-Import | **läuft**, getestet |
 | JSON-Import (auch verschachtelt) | **läuft**, getestet |
 | PDF-Import | **läuft**, sobald `pypdf` installiert ist; Textauswertung getestet |
-| Klassierung, Assets, Scoring | **läuft**, 76 Tests |
+| Klassierung, Assets, Scoring | **läuft**, 80 Tests |
 | SQLite, Duplikate, Status, Laufprotokoll | **läuft**, getestet |
 | Weboberfläche mit Filtern | **läuft**, im Browser geprüft |
 | CSV- und Excel-Export | **läuft**, getestet |
@@ -27,6 +27,7 @@ steht, ist nicht geprüft.
 | **Live-Abruf Amtsblattportal** | **läuft**, gegen den echten Dienst geprüft: 60 Fälle beim ersten 7-Tage-Lauf |
 | Zweckartikel aus dem Handelsregister | **läuft**, gegen den echten Dienst geprüft: 38 von 38 gefunden |
 | HR-Daten für bestehende Fälle nachtragen | **läuft**, Knopf „HR-Daten nachtragen“ bzw. `--zweck-nachtragen` |
+| Verwertungen (Steigerungen) | **läuft**, eigener Bewertungsweg, Filter „◆ NUR VERWERTUNGEN“ |
 | Automatischer Tageslauf | **läuft**, alle 12 Stunden, abschaltbar |
 | Löschfrist für Personendaten | **läuft**, 730 Tage, getestet |
 | Anreicherung aus Firmenwebsites | **nicht gebaut**, bewusst |
@@ -92,26 +93,57 @@ es im Protokoll unter „Letzter Lauf".
   Privatperson, und „UID NICHT GEFUNDEN" las sich wie ein Befund, war
   aber völlig normal.
 
-### Privatpersonen werden übersprungen
+### Privatpersonen werden übersprungen — ausser bei Verwertungen
 
 Der erste echte Lauf holte **Privatleute** herein — Nachname, Vorname und
 **Geburtsdatum** — und zeigte sie als „Firma": `Güney`, `Dljsselbloem`,
 `Holgate`. Ein grosser Teil der Konkurs- und Betreibungsrubriken betrifft
-natürliche Personen, nicht Betriebe.
+natürliche Personen, nicht Betriebe. Das ist abgestellt
+(`_ist_person()`), aus zwei Gründen:
 
-Das ist abgestellt (`_ist_person()`), aus zwei Gründen:
-
-1. **Sie gehören nicht zur Aufgabe.** Gesucht sind Betriebe mit Maschinen,
-   Fahrzeugen und Lager. Bei einer Privatperson gibt es keine
-   Betriebsausstattung zu verwerten.
+1. **Sie gehören nicht zur Aufgabe.** Bei einer Privatperson gibt es
+   keine Betriebsausstattung zu verwerten.
 2. **Daten über Privatleute, die niemand braucht, gehören nicht in eine
    Datenbank.** Was gar nicht erst gespeichert wird, muss nicht gelöscht,
    geschützt oder verantwortet werden.
 
-Erkannt wird es am `selectType` des Dienstes und, falls der fehlt, an
-Vorname oder Geburtsdatum ohne UID. Übersprungene Publikationen werden
-**gezählt und protokolliert** — ein Lauf ohne Firmen ist damit ein
-Ergebnis und kein Fehlschlag.
+**Die Ausnahme sind Steigerungsanzeigen** (`_ist_verwertung()`).
+Entscheidend ist nicht, *wen* die Meldung betrifft, sondern *was sie ist*:
+
+| Meldung | Was sie beschreibt | Aufgenommen |
+|---|---|---|
+| Steigerungsanzeige | eine **Sache**, die öffentlich zum Verkauf steht | ja, auch bei Privatpersonen |
+| Schuldenruf, Kollokationsplan, Einstellung über eine Privatperson | die **Person** — keine Sache, dafür ein Geburtsdatum | nein |
+
+Eine Steigerungsanzeige wird publiziert, **damit Bieter kommen**. Sie
+aufzunehmen ist genau der Zweck, zu dem sie veröffentlicht wurde. Sie
+pauschal wegzuwerfen hiesse, den einzigen öffentlichen Kanal wegzuwerfen,
+auf dem Einzelstücke — ein Fahrzeug, eine Uhrensammlung — legal zu haben
+sind. Das Geburtsdatum wird auch hier nie gespeichert; ein Test prüft das.
+
+### Verwertungen haben einen eigenen Bewertungsweg
+
+Die Firmenlogik trägt hier nichts: Branche, Zweckartikel und Firmenalter
+gibt es bei einer Pfändung gegen eine Privatperson nicht. Dafür gibt es
+etwas Besseres — den Gegenstand. Eine Steigerung ist kein Hinweis auf
+einen möglichen Deal, sie **ist** der Verkauf, mit Datum und Amt.
+
+```
++30  Öffentliche Steigerung — hier wird verkauft, nicht nur gemeldet
++20  Gegenstände in der Anzeige genannt: Fahrzeuge
+---
+ 50  Steigerung eines Personenwagens (Schwelle 50)
+```
+
+Eine Anzeige ohne genannten Gegenstand bleibt bei 30 und damit bewusst
+unter der Schwelle: sie ist eine Spur, kein Angebot. Der Filter
+**„◆ NUR VERWERTUNGEN"** in der Leiste zeigt sie allein — in einer Liste
+voller Konkurseröffnungen gehen sie sonst unter.
+
+Die Gegenstandswörter decken dafür auch Einzelstücke ab (Fahrzeuge,
+Wertgegenstände, Boote). Nur eindeutige Wörter: `kunstgegenstand`, nicht
+`kunst` — sonst wäre jede **Kunst**stoffverarbeitung ein Treffer, genau
+wie „bau" in „Baumwolle". Ein Test hält das fest.
 
 ### Welche Kantone — und warum das an der Sprache hängt
 
@@ -498,7 +530,7 @@ radar/
 │   └── shab.py       NICHT VERIFIZIERT
 ├── static/           Weboberfläche
 ├── beispiel/         Beispieldaten
-└── tests/            76 Tests, kein Netz nötig
+└── tests/            80 Tests, kein Netz nötig
 ```
 
 ### Tests

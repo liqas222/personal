@@ -121,6 +121,8 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
   <label>SCORE AB</label>
   <input type="number" id="minscore" value="0" min="0" max="100" step="5"
          style="width:64px">
+  <span class="kchip" id="nurSteigerung"
+        title="Nur öffentliche Steigerungen — dort wird tatsächlich verkauft">◆ NUR VERWERTUNGEN</span>
   <label>BRANCHE</label>
   <select id="branche"><option value="">alle</option></select>
   <label>STATUS</label>
@@ -162,6 +164,7 @@ pre.meldung{background:#080d12;border:1px solid var(--rand);border-radius:6px;
 <script>
 const $ = (id) => document.getElementById(id);
 let SCHWELLE = 50;   // wird aus /api/zustand nachgezogen
+let nurSteigerung = false;
 // Die Kantonsknöpfe waren fest auf sechs verdrahtet. Sobald der Abruf
 // mehr Kantone holt, wäre der Rest nicht filterbar und im Zweifel gar
 // nicht sichtbar. Deshalb kommen sie jetzt aus den Daten: gezeigt wird,
@@ -176,6 +179,9 @@ function filterParam() {
     p.set("kanton", [...gewaehlteKantone].join(","));
   p.set("min_score", $("minscore").value || "0");
   if ($("branche").value) p.set("branche", $("branche").value);
+  // Verwertungen sind der einzige Kanal, auf dem wirklich verkauft wird —
+  // in einer Liste voller Konkurseröffnungen gehen sie sonst unter.
+  if (nurSteigerung) p.set("art", "steigerung");
   if ($("status").value) p.set("status", $("status").value);
   return p;
 }
@@ -398,6 +404,12 @@ $("abrufen").onclick = async () => {
   }
   $("abrufen").disabled = false;
   laden(); zustand();
+};
+
+$("nurSteigerung").onclick = () => {
+  nurSteigerung = !nurSteigerung;
+  $("nurSteigerung").classList.toggle("an", nurSteigerung);
+  laden();
 };
 
 $("zweckKnopf").onclick = async () => {

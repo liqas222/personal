@@ -160,7 +160,16 @@ ABZUEGE = [
 ASSET_WORTE = {
     "Fahrzeuge": ["fahrzeug", "lieferwagen", "transporter", "lastwagen",
                   "lkw", "personenwagen", "occasionen", "fahrzeugflotte",
-                  "nutzfahrzeug"],
+                  "nutzfahrzeug", "motorfahrzeug", "motorrad", "oldtimer",
+                  "wohnmobil", "wohnwagen", "anhänger"],
+    # Für Steigerungen aus Pfändungen: dort geht es um Einzelstücke, nicht
+    # um Betriebsausstattung. Nur eindeutige Wörter — „kunst" wäre hier
+    # ein Fehler, weil es in „Kunststoffverarbeitung" steckt, und „bau"
+    # in „Baumwolle" hat uns das schon einmal gezeigt.
+    "Wertgegenstände": ["uhrensammlung", "armbanduhr", "schmuck",
+                        "edelmetall", "goldbarren", "gemälde",
+                        "kunstgegenstand", "kunstwerk", "antiquität"],
+    "Boote": ["motorboot", "segelboot", "yacht", "bootsanhänger"],
     "Stapler und Lagertechnik": ["stapler", "gabelstapler", "hubwagen",
                                  "regalanlage", "hochregal"],
     "Baumaschinen": ["bagger", "baumaschine", "radlader", "kompressor",

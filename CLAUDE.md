@@ -155,6 +155,20 @@ Protokoll.
   unerreichbar.** Die HR-Suche geht über die UID. Solche Fälle werden im
   Bericht getrennt ausgewiesen, statt unter „war schon vollständig" zu
   verschwinden.
+- **Beim Personenfilter zählt, WAS die Meldung ist, nicht WEN sie
+  betrifft.** Eine Steigerungsanzeige beschreibt eine Sache, die
+  öffentlich zum Verkauf steht, und wird publiziert, damit Bieter
+  kommen — sie bleibt drin, auch bei Privatpersonen
+  (`_ist_verwertung()`). Ein Schuldenruf über eine Privatperson nennt
+  keine Sache, dafür ein Geburtsdatum, und fliegt raus. Der ursprüngliche
+  Filter warf beides weg und damit den halben Zweck des Werkzeugs.
+- **Verwertungen werden über den Gegenstand bewertet, nicht über die
+  Firma.** Branche, Zweck und Alter gibt es bei einer Pfändung gegen eine
+  Privatperson nicht. Steigerung 30 + genannter Gegenstand 20 = 50, die
+  Schwelle. Ohne Gegenstand bleibt es bei 30: eine Spur, kein Angebot.
+- **Nur eindeutige Gegenstandswörter.** `kunstgegenstand`, nicht `kunst`
+  — sonst ist jede Kunststoffverarbeitung ein Treffer. Wortgrenzen allein
+  genügen nicht, Teilwörter sind die Falle („bau" in „Baumwolle").
 - **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
   unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
 

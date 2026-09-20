@@ -172,6 +172,41 @@ class TestBewertung(unittest.TestCase):
         self.assertLess(bewertung.bewerten(f, k)["score"],
                         bewertung.SCHWELLE)
 
+    def test_steigerung_mit_gegenstand_erreicht_die_schwelle(self):
+        """Der Kanal, auf dem Einzelstücke legal zu haben sind.
+
+        Eine Steigerungsanzeige ist kein Hinweis auf einen möglichen
+        Deal — sie IST der Verkauf, mit Datum und Amt. Die Firmenlogik
+        (Branche, Zweck, Alter) trägt hier nichts, weil der Schuldner
+        oft eine Privatperson ist.
+        """
+        f = self._fall(firma="Schmidlin",
+                       meldungsart="Öffentliche Steigerung",
+                       text="Öffentliche Steigerung: Personenwagen "
+                            "Bentley Continental GT, Jahrgang 2018")
+        k = klassierung.klassieren(f["zweck"], f["rohtext"])
+        b = bewertung.bewerten(f, k)
+        self.assertEqual(f["art"], "steigerung")
+        self.assertGreaterEqual(b["score"], bewertung.SCHWELLE)
+        self.assertIn("Fahrzeuge", k["assets_genannt"])
+
+    def test_steigerung_ohne_gegenstand_bleibt_darunter(self):
+        """Eine Anzeige ohne Gegenstand ist eine Spur, kein Angebot."""
+        f = self._fall(firma="Meier", meldungsart="Öffentliche Steigerung",
+                       text="Öffentliche Steigerung von beweglichen Sachen")
+        k = klassierung.klassieren(f["zweck"], f["rohtext"])
+        self.assertLess(bewertung.bewerten(f, k)["score"],
+                        bewertung.SCHWELLE)
+
+    def test_kunststoff_ist_keine_kunst(self):
+        """Wortgrenzen allein genügen nicht — Teilwörter sind die Falle.
+
+        „kunst" steckt in „Kunststoffverarbeitung". Deshalb stehen in der
+        Liste nur eindeutige Wörter wie „kunstgegenstand".
+        """
+        k = klassierung.klassieren("Kunststoffverarbeitung und Spritzguss")
+        self.assertNotIn("Wertgegenstände", k["assets_genannt"])
+
     def test_beratung_faellt_durch(self):
         f = self._fall(zweck="Unternehmensberatung und Coaching",
                        gruendung="2019-06-14")
@@ -507,6 +542,42 @@ class TestAmtsblattAbfrage(unittest.TestCase):
                          "https://amtsblattportal.ch/api/v1/publications/x/pdf")
         self.assertEqual(q._absolut("https://anderswo/x.pdf"),
                          "https://anderswo/x.pdf")
+
+    def test_steigerung_gegen_privatperson_bleibt_drin(self):
+        """Die Ausnahme vom Personenfilter — und warum es sie gibt.
+
+        Eine Steigerungsanzeige beschreibt eine Sache, die öffentlich
+        zum Verkauf steht; publiziert wird sie, damit Bieter kommen.
+        Sie wegzuwerfen hiesse, den einzigen Kanal wegzuwerfen, auf dem
+        Einzelstücke legal zu haben sind.
+        """
+        from radar.quellen.amtsblatt import AmtsblattQuelle
+        q = AmtsblattQuelle({"pause_sekunden": 0, "zweck_nachschlagen": False})
+        q._liste = lambda seit, bis: [
+            {"id": "a", "datum": "2026-09-18", "kanton": "ZH", "pdf": None,
+             "titel": "Öffentliche Steigerung"},
+            {"id": "b", "datum": "2026-09-18", "kanton": "ZH", "pdf": None,
+             "titel": "Schuldenruf"}]
+
+        def detail(pid):
+            gemeinsam = {"firma": "Schmidlin", "_art": "person",
+                         "_vorname": "Walter", "_geburtsdatum": "1970-01-01",
+                         "ort": "Thalwil"}
+            if pid == "a":
+                gemeinsam["text"] = ("Öffentliche Steigerung: Personenwagen "
+                                     "Bentley Continental GT")
+            else:
+                gemeinsam["text"] = "Schuldenruf"
+            return gemeinsam
+
+        q._detail = detail
+        saetze = q.holen("2026-09-01")
+        # Die Steigerung bleibt, der Schuldenruf fliegt raus.
+        self.assertEqual(len(saetze), 1)
+        self.assertIn("Steigerung", saetze[0]["meldungsart"])
+        # Und das Geburtsdatum wird in keinem Fall weitergereicht.
+        self.assertFalse([s for s in saetze[0] if s.startswith("_")])
+        self.assertNotIn("1970-01-01", json.dumps(saetze[0]))
 
     def test_privatperson_wird_erkannt(self):
         """Echte Feldform aus dem Dienst (KK04, Winterthur, 2026-09-18).

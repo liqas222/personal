@@ -209,7 +209,8 @@ def behandle_get(pfad, query):
             kantone=kantone or None,
             min_score=int(ms) if ms.isdigit() else 0,
             branche=(query.get("branche") or [None])[0] or None,
-            status=(query.get("status") or [None])[0] or None)
+            status=(query.get("status") or [None])[0] or None,
+            art=(query.get("art") or [None])[0] or None)
         for f in faelle:
             f["assets"] = json.loads(f.get("assets") or "[]")
             f["begruendung"] = json.loads(f.get("begruendung") or "[]")
