@@ -36,25 +36,6 @@ Die Seite besteht aus statischen Dateien. `serve.py` liefert sie aus und tut
 sonst nichts — er wird nur gebraucht, wenn die Seite unter einer festen
 Adresse und hinter einem Passwort stehen soll.
 
-## Konkurs Deal Radar
-
-Im selben Repo liegt ein zweites Projekt: der **Konkurs Deal Radar**
-(`radar/`), erreichbar über den Knopf oben rechts im Atlas oder unter
-`/radar/`. Er bewertet Schweizer Konkursmeldungen danach, wo sich das
-Nachfragen beim Konkursamt eher lohnt. Eigene Anleitung in
-`radar/README.md`.
-
-Die Meldungen kann er selbst holen — aus dem **Amtsblattportal** (SHAB plus
-Kantonsblätter, offene Schnittstelle, kein Schlüssel, kein Konto). Der
-Abruf ist **im Auslieferungsstand abgeschaltet** und muss auf dem Server
-eingeschaltet werden, nachdem `python3 -m radar.pruefen` gezeigt hat, dass
-die Schnittstelle wirklich so antwortet wie angenommen. Wer nichts
-einschaltet, importiert weiterhin CSV, JSON oder PDF von Hand.
-
-Beide laufen im selben Serverprozess. Der Atlas bleibt davon unberührt:
-fehlt der Radar oder bricht er beim Laden, läuft der Atlas weiter — und der
-Atlas selbst ruft nach wie vor nichts ab.
-
 ## Starten
 
 Kein Build, keine Installation, keine Abhängigkeiten:
@@ -79,8 +60,9 @@ Standardbibliothek. Copy-Paste-Befehle stehen in `DEPLOY.md`.
 | `static/index.html` | Gerüst und Gestaltung |
 | `static/geo.js` | Ringe dekodieren, Mercator-Projektion, Entfernungen |
 | `static/data.js` | **Die Inhalte** — Meerengen, Fakten, Seewege, Quellen |
-| `static/lagen.js` | **Das Lagebild** — Konflikte, Ziele, Status, Vektoren |
+| `static/laender.js` | **Was im Quiz gefragt wird** — Staaten, Gebiete, Umstrittenes |
 | `static/handel.js` | **Handelsprofile** — Waren, Partner, Abhängigkeitsanteile |
+| `static/wto.js` | Erzeugte WTO-Anteile (nicht von Hand ändern) |
 | `static/atlas.js` | Zeichnen auf Canvas, Zoomflug, Klicks, Quiz |
 | `static/world.js` | Erzeugte Kartengeometrie (nicht von Hand ändern) |
 | `tools/build_map.py` | Erzeugt `world.js` aus den Natural-Earth-Daten |
@@ -232,17 +214,6 @@ curl -s http://127.0.0.1/api/live | head -c 300
 **Grenze:** Bilaterale Handelsdaten in Echtzeit gibt es nicht kostenlos. Die
 Warenstruktur und die Abhängigkeitsanteile in `handel.js` sind kuratiert und
 mit Quelle versehen, nicht live.
-
-## Ebenen ergänzen
-
-Alles Lagebezogene steht in `static/lagen.js`: `KONFLIKTE` (Theaterflächen als
-lon/lat-Ringe), `ZIELE`, `KONTROLLZONEN`, `STATUS` je Meerenge, `VEKTOREN`,
-`CALLOUTS`. Eine neue Ebene braucht zusätzlich einen Eintrag in `EBENEN` und
-eine Zeichenfunktion in `atlas.js`.
-
-Zwei Regeln für Inhalte dieser Art: nur öffentlich bekannte, seit Jahren
-beschriebene Standorte auf Kartenmassstab — nichts Feinkörniges. Und jede
-Statuseinstufung ist als Bewertung kenntlich, nicht als Meldung.
 
 ## Zu den Inhalten
 

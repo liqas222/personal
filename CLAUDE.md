@@ -10,167 +10,33 @@ einmal an Feed, Telegram, PortWatch und Lagebild dranhing, ist entfernt — wer
 es zurückholen will, findet es in der Git-Historie, aber nicht in diesem
 Stand.
 
-## Zwei Projekte in einem Repo
+## Ein Projekt, nicht mehr
 
-- **Atlas** (`static/`, `serve.py`) — Länder- und Meerengenquiz, statisch,
-  keine Abrufe nach draussen.
-- **Konkurs Deal Radar** (`radar/`) — Schweizer Konkursmeldungen bewerten.
-  Hängt unter `/radar/` im selben Serverprozess. Eigene README dort.
+Hier lag zeitweise ein zweites Projekt (`radar/`, später `lage/`). Beide
+sind entfernt — der Auslieferungsstand ist wieder **nur der Atlas**.
 
-Warum ein Prozess und nicht zwei Dienste: der Zielserver hat 1 GB RAM, ist
-geteilt, und der Funnel zeigt auf genau einen Port. Ein zweiter Dienst
-hiesse ein zweiter Port, eine Proxy-Regel und ein zweiter Neustart.
+Was daraus bleibt, weil es allgemein gilt:
 
-**Der Radar darf den Atlas nie mitreissen.** `serve.py` lädt ihn in einem
-try/except; fehlt oder bricht er, läuft der Atlas weiter und sagt es im
-Protokoll.
-
-**Regeln, die im Radar gelten** (ausführlich in `radar/README.md`):
-- Kontaktempfehlung ausschliesslich ans Konkursamt. Ein Feld für
-  Inhaberkontakte existiert nicht — was es nicht gibt, kann man nicht aus
-  Versehen benutzen. Ein Test prüft das.
-- Vermutete Assets sind als vermutet zu kennzeichnen, immer.
-- Ein nicht eingerichteter Quellen-Adapter wirft, statt eine leere Liste zu
-  liefern. Sonst sieht ein leerer Lauf aus wie „nichts gefunden".
-- Der Score ist eine Sortierhilfe, keine Wertangabe, und jede Zeile nennt
-  Punkte, Grund und Herkunft.
-- **Keinen verifizierten Live-Zugang behaupten, der keiner ist.** Der
-  Amtsblatt-Adapter (`radar/quellen/amtsblatt.py`) läuft inzwischen gegen
-  den echten Dienst — geprüft auf dem Server, nicht hier: aus dieser
-  Umgebung ist der Host gesperrt. Was geprüft ist und was nicht, steht so
-  in `radar/README.md` und gehört dort auch hin.
-- **Privatpersonen gehören nicht in die Datenbank.** Ein grosser Teil der
-  Konkurs- und Betreibungsrubriken betrifft natürliche Personen — der
-  Dienst liefert Nachname, Vorname und Geburtsdatum. `_ist_person()`
-  sortiert sie aus, bevor irgendetwas gespeichert wird. Der erste echte
-  Lauf holte sie prompt herein und zeigte sie als „Firma"; was gar nicht
-  erst gespeichert wird, muss auch nicht geschützt werden.
-- **Ein Lauf ohne Firmen ist ein Ergebnis, kein Fehler.** Übersprungene
-  Personen werden gezählt und protokolliert; nur wenn gar nichts
-  auswertbar war UND keine Person dabei war, wirft der Adapter.
-- **Die Antwort des Dienstes ist verschachtelt.** Kopfdaten unter `meta`,
-  Titel je Sprache, PDF-Link relativ unter `links.pdf`. Flach nachgesehen
-  findet sich keine `id`, jeder Eintrag fliegt raus — und eine
-  antwortende Schnittstelle sieht aus wie eine leere. Das hat drei
-  Runden gekostet.
-- **Der Zweckartikel fehlt in Konkurspublikationen** — er steht im
-  Handelsregister. Ohne ihn trägt nur der Firmenname: der erste echte
-  Lauf fand 60 Firmen und **keine einzige** über Score 60. Geholt wird er
-  jetzt aus den HR-Rubriken DESSELBEN Portals (`_zweck_zu_uid`), also
-  ohne zweite Quelle. Der Suchparameter ist nicht dokumentiert, wird
-  einmal ausprobiert und gemerkt; `radar.pruefen` Schritt 5 zeigt ihn.
-- **„Keine Fälle" und „nichts über der Schwelle" sind zwei Lagen.** Die
-  Oberfläche riet „importiere eine CSV-Datei", während sechzig Fälle in
-  der Datenbank lagen. Sind Fälle da, nennt die Leermeldung Zahl, Grund
-  und einen Knopf auf Score 0.
-- **`node tools/pruefe_ui.js radar/static/index.html` nach jeder
-  Textänderung im UI.** Ein gerades Anführungszeichen in einem
-  JS-String („Jetzt abrufen") hat das ganze Skript zerlegt — die Seite
-  lud und blieb leer. Das Werkzeug findet es in einer Sekunde und nennt
-  die Zeilennummer der HTML-Datei.
-- **`python3 -m radar.pruefen` ist der Beweis, nicht die Behauptung.** Vier
-  Schritte gegen die echte Schnittstelle, nur lesend. Weichen Rubrikcodes
-  oder Feldnamen ab, sagt es das und nennt den Eintrag, der zu ändern ist.
-- **Einstellungen kriegen einen Befehl, keinen Schnipsel.**
-  `python3 -m radar.einrichten --an` statt „trag das in config.json ein".
-  Der JSON-Schnipsel wurde genau einmal in die Shell geklebt und ergab
-  `amtsblatt:: command not found` — die Einstellung war nicht gesetzt, sah
-  aber aus, als wäre etwas passiert. Der Befehl ergänzt die Datei und
-  überschreibt sie nicht; `auth_token` und Port bleiben stehen.
-- **Abruf standardmässig aus.** `"amtsblatt": {"aktiv": false}` im
-  Auslieferungsstand; `auto` (12-Stunden-Schleife) ist eine zweite,
-  getrennte Entscheidung. Der Atlas ruft weiterhin nichts ab — die Regel
-  „nichts abrufen" gilt unverändert für `static/`.
-- **Der Adapter wirft, statt leer zurückzukommen.** Gefundene
-  Publikationen ohne auswertbare Firmendaten sind ein Fehler, kein
-  Ergebnis — sonst liest sich eine kaputte Feldzuordnung als „heute nichts
-  gefunden".
-- **„0 gelesen" braucht einen Grund.** Die letzte Protokollzeile des
-  Adapters (Sätze, übersprungene Personen, fehlgeschlagene Details) wird
-  als `bemerkung` im Laufprotokoll gespeichert und in der Fusszeile
-  gezeigt. Ohne sie ist nicht zu unterscheiden, ob es nichts zu holen
-  gab, ob alles Privatpersonen waren oder ob die Feldzuordnung klemmt.
-  Eine Erklärung, die nur in der Browser-Konsole steht, hilft niemandem.
+- **`serve.py` liefert Dateien aus und tut sonst nichts.** Kein Konto,
+  kein Schlüssel, keine Hintergrundschleife. Wer wieder etwas einhängt,
+  tut es in einem `try/except`, damit ein kaputtes Nebenprojekt den Atlas
+  nicht mitreisst — und schreibt dazu, was geprüft ist und was nicht.
+- **Keinen verifizierten Live-Zugang behaupten, der keiner ist.** Aus
+  dieser Umgebung sind fremde Hosts gesperrt; ein Adapter, der hier nur
+  gegen einen Nachbau lief, ist nicht geprüft. Der Beweis ist ein
+  Protokolleintrag vom Zielserver, keine Zusicherung im Code.
 - **Neue Spalten nachrüsten, nicht die Datenbank wegwerfen.**
-  `CREATE TABLE IF NOT EXISTS` ändert eine vorhandene Tabelle nicht —
-  `Speicher._nachruesten()` ergänzt fehlende Spalten per ALTER TABLE. An
-  einer bestehenden Datenbank hängt Arbeit.
-- **Die Kantonsauswahl hängt an der Sprache.** `klassierung.py` sucht
-  deutsche Wörter; bei einer französischen oder italienischen Meldung
-  greift keines, der Fall bekäme Score 0 und fiele still durch.
-  `DEUTSCHSPRACHIG` (19 Kantone, BE und GR mit deutscher Mehrheit dabei)
-  ist deshalb die sinnvolle Vorgabe — `--kantone alle` bleibt möglich,
-  aber dann sortiert das Auge, nicht der Radar.
-- **Die Kantonsknöpfe kommen aus den Daten**, nicht aus einer festen
-  Liste. Sechs verdrahtete Knöpfe bei 19 abgerufenen Kantonen hätten den
-  Rest unfilterbar gemacht.
-- **Die Zeitmarke ist der letzte Lauf MIT Daten**, nicht der letzte ohne
-  Fehler. Ein kaputter Adapter lief einmal fehlerfrei durch, las null und
-  schob die Marke auf heute — alles davor war damit unerreichbar, und
-  jeder weitere Abruf durchsuchte nur noch den laufenden Tag. Dazu drei
-  Tage Überlappung; doppelt Geholtes fängt die Duplikatprüfung.
-  Nachholen geht mit `--tage N` bzw. der Auswahl neben „Jetzt abrufen".
-- **Jeder Abruf sagt, ab wann er gesucht hat.** Ohne diese Angabe ist ein
-  Ergebnis nicht einzuordnen — „0 neu" heisst etwas völlig anderes, je
-  nachdem ob ein Tag oder ein Jahr durchsucht wurde.
-- **Feldnamen unterscheiden sich je Rubrik.** Das Konkursamt heisst bei
-  KK04 `registrationOfficeAndCirculationAuthority`, bei KK03 schlicht
-  `registrationOffice`. Beide Schreibweisen stehen im Adapter. Ein
-  einzelnes Beispiel beweist einen Feldnamen also nicht.
-- **Die Prüfung muss sich eine FIRMA aussuchen.** Schritt 3 erwischte
-  eine Privatperson und meldete „UID NICHT GEFUNDEN, Zweck NICHT
-  GEFUNDEN" — bei einer Privatperson beides normal, als Befund aber
-  irreführend. Dass der Zweck fehlt, ist ausserdem NIE ein Befund: er
-  steht nicht in Konkurspublikationen.
-- **Die Zusammenfassungszeile muss allein verständlich sein.** Sie ist
-  das, was in der Fusszeile und auf der Kommandozeile erscheint; eine
-  Erklärung weiter oben im Protokoll sieht niemand. Deshalb steht der
-  Zweckstand („12 Zweckartikel gefunden, 3 ohne") dort mit drin.
-- **Nachrüsten statt Datenbank wegwerfen.** `--zweck-nachtragen` holt
-  fehlende Zweckartikel für bestehende Fälle und bewertet sie neu
-  (`kette.neu_bewerten`); Status und Notiz bleiben. Ein Fall ging dabei
-  von 25 auf 55 — das ist der Unterschied zwischen unbrauchbar und
-  brauchbar.
-- **Die Schwelle ist 50, nicht 60 — und sie steht an EINER Stelle.**
-  Die 60 stammten aus der Spezifikation, in der 45 Punkte aus der
-  Firmenwebsite kommen sollten; die Anreicherung wurde gestrichen, die
-  Schwelle blieb. Ergebnis: aus amtlichen Daten allein sind höchstens 55
-  erreichbar (30 Branche + 20 Alter + 5 Konkurseröffnung), und 40 echte
-  Fälle ergaben keinen einzigen Treffer. Wer an den Gewichten dreht,
-  rechnet vorher den Musterfall durch — ein Test hält ihn fest.
-- **Das Gründungsdatum kommt aus derselben HR-Anfrage wie der Zweck.**
-  20 von 55 Punkten hängen daran, und in der Konkurspublikation steht es
-  oft nicht. Es getrennt zu holen wäre Verschwendung, es liegen zu lassen
-  die teuerste Art von Sparsamkeit.
-- **Der Score sortiert, er sperrt nicht aus.** Die Oberfläche startet bei
-  Score 0. Ein harter Filter auf der Schwelle hat zweimal eine leere
-  Liste gezeigt, obwohl Fälle da waren — und widersprach dem eigenen
-  Grundsatz, dass der Score eine Sortierhilfe ist.
-- **Nachtragen sucht nach ALLEN Lücken, nicht nur nach der, die den
-  Anlass gab.** Die erste Fassung fragte nur nach fehlendem Zweck — nach
-  dem ersten echten Lauf hatten alle vierzig Fälle einen, also tat sie
-  nichts, obwohl vielen das Gründungsdatum fehlte (20 von 55 Punkten).
-  „0 Fälle geprüft" sah aus wie „alles in Ordnung".
-- **Ein Fall ohne gültige UID ist nicht vollständig, sondern
-  unerreichbar.** Die HR-Suche geht über die UID. Solche Fälle werden im
-  Bericht getrennt ausgewiesen, statt unter „war schon vollständig" zu
-  verschwinden.
-- **Beim Personenfilter zählt, WAS die Meldung ist, nicht WEN sie
-  betrifft.** Eine Steigerungsanzeige beschreibt eine Sache, die
-  öffentlich zum Verkauf steht, und wird publiziert, damit Bieter
-  kommen — sie bleibt drin, auch bei Privatpersonen
-  (`_ist_verwertung()`). Ein Schuldenruf über eine Privatperson nennt
-  keine Sache, dafür ein Geburtsdatum, und fliegt raus. Der ursprüngliche
-  Filter warf beides weg und damit den halben Zweck des Werkzeugs.
-- **Verwertungen werden über den Gegenstand bewertet, nicht über die
-  Firma.** Branche, Zweck und Alter gibt es bei einer Pfändung gegen eine
-  Privatperson nicht. Steigerung 30 + genannter Gegenstand 20 = 50, die
-  Schwelle. Ohne Gegenstand bleibt es bei 30: eine Spur, kein Angebot.
-- **Nur eindeutige Gegenstandswörter.** `kunstgegenstand`, nicht `kunst`
-  — sonst ist jede Kunststoffverarbeitung ein Treffer. Wortgrenzen allein
-  genügen nicht, Teilwörter sind die Falle („bau" in „Baumwolle").
-- **Personendaten haben eine Frist.** `loeschfrist_tage` (730) löscht
-  unbearbeitete Fälle; bearbeitete bleiben, daran hängt Arbeit.
+  `CREATE TABLE IF NOT EXISTS` ändert eine vorhandene Tabelle nicht.
+- **„0 gefunden" braucht einen Grund.** Ohne Begründung ist nicht zu
+  unterscheiden, ob es nichts gab oder ob etwas klemmt. Eine Erklärung,
+  die nur in der Browser-Konsole steht, hilft niemandem.
+- **Einstellungen kriegen einen Befehl, keinen Schnipsel.** Ein
+  JSON-Schnipsel in einer Anleitung landet in der Shell und ergibt
+  `command not found` — die Einstellung ist dann nicht gesetzt, sieht
+  aber so aus.
+- **Erfundene Prüfziffern fliegen auf.** Zweimal hat eine selbst
+  ausgedachte Schweizer UID die eigene Modulo-11-Prüfung nicht bestanden.
+  Testdaten mit Prüfziffer werden gerechnet, nicht erfunden.
 
 ## Nach jeder Änderung: den Befehl dazuschreiben
 

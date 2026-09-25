@@ -60,79 +60,12 @@ tailscale funnel status          # nur lesen: SwissIntel muss weiter "Funnel on"
 Dann die URL im Browser öffnen. Benutzername ist egal, Passwort ist der
 `auth_token`. Falls noch die alte Seite erscheint: Strg+Shift+R.
 
-## Konkurs Deal Radar
+## Der Server ruft nichts ab
 
-Läuft im selben Dienst mit, unter `/radar/`. Kein zweiter Port, kein
-zweiter Dienst, kein Eingriff in Tailscale. Nach dem Update ist er da.
-
-### Live-Abruf: erst prüfen, dann einschalten
-
-Der Radar kann die Meldungen selbst holen — aus dem **Amtsblattportal**
-(SHAB plus Kantonsblätter, offene Schnittstelle, kein Schlüssel). Der
-Adapter läuft gegen den echten Dienst — geprüft auf diesem Server, nicht
-in der Entwicklungsumgebung, wo `amtsblattportal.ch` gesperrt ist.
-Deshalb nach jedem Update nachsehen, was wirklich zurückkommt:
-
-```bash
-cd /opt/atlas && python3 -m radar.pruefen
-```
-
-Das ändert nichts, es liest nur. Vier Schritte: Rubrikliste, Trefferliste,
-Detail-XML mit Feldnamen, voller Adapterlauf. Weichen Rubrikcodes oder
-Feldnamen ab, steht es dort und lässt sich in `radar/config.json` bzw. in
-`radar/quellen/amtsblatt.py` nachziehen.
-
-Erst wenn Schritt 4 „die Schnittstelle funktioniert" meldet, einschalten:
-
-```bash
-cd /opt/atlas && python3 -m radar.einrichten --an --kantone deutsch && sudo systemctl restart atlas
-```
-
-Das ist ein Befehl, kein Textbaustein — bestehende Einträge in
-`radar/config.json` (Port, `auth_token`, eigene Adressen) bleiben
-erhalten, es wird nur ergänzt.
-
-`--kantone deutsch` nimmt die 19 deutschsprachigen Kantone. Das hat einen
-technischen Grund: die Klassierung sucht deutsche Wörter („Garage",
-„Transport") — bei einer französischen Meldung greift keines, der Fall
-bekäme Score 0 und fiele still durch. `--kantone alle` geht trotzdem,
-dann sortiert dein Auge statt des Radars. `--kantone ZH,SG` nimmt genau
-diese.
-
-Der erste Abruf holt **30 Tage**, jeder weitere ab dem letzten Lauf mit
-Daten minus drei Tagen Überlappung. Vergangenes nachholen:
-
-```bash
-cd /opt/atlas && python3 -m radar.lauf --abrufen --tage 90
-```
-
-Ohne Angabe läuft der Abruf alle 12 Stunden von selbst. Wer lieber nur auf
-Knopfdruck abruft, nimmt `--kein-auto`. Abschalten: `--aus`. Ohne jede
-Option zeigt der Befehl nur den Stand an. Die Löschfrist für unbearbeitete
-Fälle setzt `--loeschfrist 730` (0 = nie).
-
-Der alte SHAB-Adapter bleibt abgeschaltet und unverifiziert; er wird nicht
-gebraucht. Für den PDF-Import:
-
-```bash
-sudo pip3 install pypdf     # optional, nur für PDF
-```
-
-Die Datenbank liegt unter `/opt/atlas/radar/daten/radar.db` und ist von git
-ausgenommen. Sichern, wenn Fälle bearbeitet wurden:
-
-```bash
-cp /opt/atlas/radar/daten/radar.db ~/radar-backup-$(date +%F).db
-```
-
-## Der Server ruft nichts mehr ab
-
-Seit dem Umbau zum Quiz liefert `serve.py` für den **Atlas** nur noch
-Dateien aus: kein Telegram, keine Feeds, keine Hintergrundschleifen. Die
-einzige Ausnahme ist der Amtsblatt-Abruf des Radars, und der ist
-ausgeschaltet, bis er in `radar/config.json` eingeschaltet wird. In
-`config.json` zählt nur noch `host`, `port` und `auth_token`. Alte Einträge
-wie `tg_token` oder `web_quellen` schaden nicht, werden aber ignoriert.
+`serve.py` liefert nur Dateien aus: kein Telegram, keine Feeds, keine
+Live-Abrufe, keine Hintergrundschleifen. In `config.json` zählen nur
+`host`, `port` und `auth_token`. Alte Einträge aus früheren Ausbaustufen
+schaden nicht, werden aber ignoriert.
 
 ## Update (nach jedem Push)
 
